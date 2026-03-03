@@ -1,0 +1,7 @@
+  patch_size: 224
+  stride: 224
+  version: "terramind_v1_base"
+  num_classes: 3
+  pretrained: true
+  ignore_index: 0
+  num_workers: 0
