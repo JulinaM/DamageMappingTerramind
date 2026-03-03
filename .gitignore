@@ -1,0 +1,8 @@
+./__pycache__/*
+./Images_large/*
+./Images_small/*
+./logs/*
+./test_output/*
+./arm.slurm
+./slurm.slurm
+./multirun/
