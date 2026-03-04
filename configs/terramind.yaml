@@ -1,0 +1,68 @@
+defaults:
+  - base
+  - _self_
+  - model: terramind
+
+model:
+  _target_: damage_mapping.models.terramind.TerraMindEncoder
+  num_predictands: 1
+  finetune: false
+  output_layers: [3, 5, 7, 9, 11]
+  bilinear: false
+
+dataset:
+  _target_: damage_mapping.datasets.sentinel2
+  root_path: ${hydra:runtime.cwd}/data/input/images
+  num_augmentations: 2
+  input_size: 224
+  stride: 224
+  preload: False
+  batch_size: 4
+  shuffle: True
+  num_workers: 2
+
+trainer:
+  _target_: damage_mapping.trainer.Trainer
+  n_epochs: 256
+  ckpt_interval: 32
+  eval_interval: 16
+  log_interval: 1
+  best_metric_key: 'RMSE'
+  precision: fp32
+
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 0.00001
+  weight_decay: 0.00001
+  betas: [0.9, 0.999]
+
+lr_scheduler:
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+  T_max: 8092
+  last_epoch: -1
+
+criterion:
+  _target_: torch.nn.HuberLoss
+  reduction: 'none'
+
+activation:
+  _target_: torch.nn.Sigmoid
+
+evaluator:
+  _target_: mod_res_damage.evaluator.Evaluator
+  inference_mode: random
+  inference_batch: 64
+  num_monte_carlo: 256
+  save_output: true
+  task: regression
+  
+use_wandb: true
+num_workers: 0
+use_final_ckpt: true
+find_unused_parameters: false
+pin_memory: false
+persistent_workers: false
+
+train_batch_size: 8
+test_batch_size: 1
+

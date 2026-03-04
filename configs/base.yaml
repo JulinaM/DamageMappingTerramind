@@ -1,0 +1,15 @@
+experiment_name: ???
+
+dry_run: False
+wandb:
+  project: damage-mapping
+  name: dm-dev
+  entity: julinam
+
+hydra:
+  run:
+    dir: ${hydra:runtime.cwd}/output/experiments/${hydra.job.config_name}_${experiment_name}_${now:%Y-%m-%d}_${now:%H%M%S}
+  sweeper:
+    params:
+      ++demo_param: test
+      ++seed: 42
