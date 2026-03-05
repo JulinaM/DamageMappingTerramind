@@ -4,3 +4,4 @@
 ./slurm/arm.slurm
 ./wandb
 ./junk/
+./configs/old_configs
