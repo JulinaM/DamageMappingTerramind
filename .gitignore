@@ -5,3 +5,4 @@
 ./wandb
 ./junk/
 ./configs/old_configs
+./slurm_logs/*
