@@ -2,10 +2,10 @@
 import logging
 logging.getLogger("albumentations").setLevel(logging.ERROR)
 
-from geography.damage_mapping_terramind.V2.damage_mapping.datasets.DataLoader import Train_Val_Loader
-from geography.damage_mapping_terramind.V2.damage_mapping.models.utils import weights, calc_batch_metrics, calc_epoch_metrics, move_to_device, set_seeds, save_checkpoint
-from damage_mapping.models.Decoder_UNet2D import UNet2D
-from damage_mapping.models.Encoder_TerraMind import TerraMindEncoder
+from datasets.DataLoader import Train_Val_Loader
+from models.utils import weights, calc_batch_metrics, calc_epoch_metrics, move_to_device, set_seeds, save_checkpoint
+from models.Decoder_UNet2D import UNet2D
+from models.Encoder_TerraMind import TerraMindEncoder
 
 import torch
 import torch.nn as nn
@@ -17,74 +17,11 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 from hydra.core.hydra_config import HydraConfig
 
-class Trainer:
-     def __init__(
-        self,
-        model: nn.Module,
-        train_loader: DataLoader,
-        criterion: nn.Module | None,
-        optimizer: Optimizer,
-        lr_scheduler: LRScheduler,
-        evaluator: torch.nn.Module,
-        n_epochs: int,
-        ckpt_dir: pathlib.Path | str,
-        device: torch.device,
-        distributed: bool,
-        cudnn_backend: bool,
-        precision: str,
-        use_wandb: bool,
-        ckpt_interval: int,
-        eval_interval: int,
-        log_interval: int,
-        best_metric_key: str,
-    ):
-        self.rank = int(os.environ["RANK"])
-        self.criterion = criterion
-        self.model = model
-        self.train_loader = train_loader
-        self.optimizer = optimizer
-        self.lr_scheduler = lr_scheduler
-        self.evaluator = evaluator
-        self.n_epochs = n_epochs
-        self.ckpt_dir = ckpt_dir
-        self.device = device
-        self.distributed = distributed
-        self.cudnn_backend = cudnn_backend
-        self.use_wandb = use_wandb
-        self.ckpt_interval = ckpt_interval
-        self.eval_interval = eval_interval
-        self.log_interval = log_interval
-        self.best_metric_key = best_metric_key
-        
-        self.logger = logging.getLogger()
-        self.training_stats = {
-            name: RunningAverageMeter(length=len(self.train_loader))
-            for name in ["loss", "data_time", "batch_time", "eval_time"]
-        }
-        self.best_metric = -1
-        self.best_metric_comp = operator.gt
-        self.num_predictands = len(self.train_loader.dataset.predictands)
-
-        assert precision in [
-            "fp32",
-            "fp16",
-            "bfp16",
-        ], f"Invalid precision {precision}, use 'fp32', 'fp16' or 'bfp16'."
-        
-        torch.backends.cudnn.enabled = self.cudnn_backend
-        
-        self.enable_mixed_precision = precision != "fp32"
-        self.precision = torch.float16 if (precision == "fp16") else torch.bfloat16
-        self.scaler = torch.amp.GradScaler("cuda", enabled=self.enable_mixed_precision)
-        self.start_epoch = 0
-
-        if self.use_wandb:
-            import wandb
-            self.wandb = wandb
-
 device = "cuda" if torch.cuda.is_available() else "cpu"
- 
-@hydra.main(version_base = "1.2", config_path = "configs/train_val" , config_name = 'config')
+
+CONFIG_DIR = "/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/configs/old_configs"
+
+@hydra.main(version_base = "1.2", config_path = CONFIG_DIR+"/train_val" , config_name = 'config')
 def main(cfg: DictConfig):
     hc = HydraConfig.get()
     dir, subdir = hc['sweep']['dir'], hc['sweep']['subdir']

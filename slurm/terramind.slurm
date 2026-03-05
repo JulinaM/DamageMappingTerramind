@@ -2,22 +2,17 @@
 
 #SBATCH --job-name=Terramind
 #SBATCH --account=PGS0413
-#SBATCH --partition=gpu
 #SBATCH --gpus-per-node=1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --time=00:03:00
 #SBATCH --mem=16G
+#SBATCH --output=/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/slurm_logs/%x_%j.out
+#SBATCH --error=/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/slurm_logs/%x_%j.err
 
-# Pass job type via --export
 # USAGE:: sbatch --export=JOB_TYPE=train terramind.slurm
 JOB_TYPE=${JOB_TYPE:-train}
-
-proj_dir="/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2"
-LOG_FILE_PATH="${proj_dir}/data/output/slurm_logs/${JOB_TYPE}_${SLURM_JOB_ID}_$(date +%Y%m%d_%H%M%S).out"
-mkdir -p "$(dirname $LOG_FILE_PATH)"
-exec > "$LOG_FILE_PATH" 2>&1
 
 module purge
 module load cuda/12.4.1
@@ -32,7 +27,6 @@ echo "Hostname : $(hostname)"
 echo "Date : $(date)"
 echo "Python : $(which python3)"
 
-# GPU check
 echo "===== GPU INFO ====="
 nvidia-smi
 python3 - <<EOF
@@ -42,14 +36,16 @@ print("CUDA available:", torch.cuda.is_available())
 print("GPU count:", torch.cuda.device_count())
 EOF
 
-WANDB_NAME="${JOB_TYPE}-${ITERS}-ep${EPOCHS}_${REG_ALPHA}"
+
+
+# WANDB_NAME="${JOB_TYPE}--juls"
+proj_dir="/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/"
 
 echo "Executing command for job type: $JOB_TYPE"
 case $JOB_TYPE in
   train)
     # torchrun --nproc_per_node=1 ../damage_mapping/run_exp.py --config-name=train --wandb_name="$wandb_name"
     python3 ${proj_dir}/damage_mapping/trainer.py
-
     ;;
     
   evaluate)

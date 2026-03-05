@@ -1,0 +1,31 @@
+====== JOB INFO ======
+Job ID: 3908417
+Job Type: train
+Working dir : /users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2
+Hostname : a0256.ten.osc.edu
+Date : Thu Mar  5 03:05:20 PM EST 2026
+Python : /users/PGS0218/julina/.conda/envs/lora/bin/python3
+===== GPU INFO =====
+Thu Mar  5 15:05:20 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.95.05              Driver Version: 580.95.05      CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100-PCIE-40GB          On  |   00000000:81:00.0 Off |                    0 |
+| N/A   28C    P0             37W /  250W |       0MiB /  40960MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+Torch: 2.10.0+cu128
+CUDA available: True
+GPU count: 1

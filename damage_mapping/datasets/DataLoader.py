@@ -9,7 +9,7 @@ import random, math
 from functools import lru_cache
 import warnings
 
-from ..utils.utils import standardize, RandomFlipPair, RandomRotationPair
+from models.utils import standardize, RandomFlipPair, RandomRotationPair
 
 
 
