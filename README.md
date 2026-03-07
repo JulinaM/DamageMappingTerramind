@@ -19,13 +19,12 @@ Sentinel-1 SAR offers all-weather sensitivity to surface roughness and moisture 
 
 To run experiments **without** pre-conditioners, please use the following slurm command.
 ```
-torchrun --nproc_per_node=2 Train.py -m ++train_loader=small 
+torchrun --nproc_per_node=2 damage_mapping/trainer.py -m ++train_loader=small 
 ```
 
 For multi-GPU training, please use the following slurm command (2 GPUs example)
 ```
-CUDA_VISIBLE_DEVICES="0,1" accelerate launch --main_process_port $(shuf -i 10000-60000 -n 1) \
- Train.py -m ++train_loader=small
+sbatch --export=JOB_TYPE=train terramind.slurm
 ```
 
 ---
