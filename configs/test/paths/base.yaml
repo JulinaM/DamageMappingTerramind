@@ -1,9 +1,0 @@
-modalities:
-  S2L2A: 
-    before: Images_large/Test/Before/S2L2A 
-    after: Images_large/Test/After/S2L2A
-  S1GRD: 
-    before: Images_large/Test/Before/S1GRD/DESC
-    after: Images_large/Test/After/S1GRD/DESC
-label_dir: Images_large/Test/Labels
-trained_model: multirun/Initial3/2025-11-10/01-10-07/1/checkpoints/best_model_epoch1_valloss0.3329.pt

@@ -8,12 +8,11 @@ from torchvision import transforms
 import random, math
 from functools import lru_cache
 import warnings
+import os
 
 from models.utils import standardize, RandomFlipPair, RandomRotationPair
 
-
-
-# # ------------------- Set up data loader for train & Validation ------------------- # #
+INPUT_DIR = Path("/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/input/")
 
 class Train_Val_Loader(Dataset):
     def __init__(
@@ -49,7 +48,9 @@ class Train_Val_Loader(Dataset):
             warnings.warn(f"Caution: with stride > 224, some pixels may not be seen by the model.",UserWarning)
 
         self.modalities = modalities
-        self.label_files = sorted(Path(label_dir).glob("*.tif"))
+        print(str(INPUT_DIR / label_dir))
+        self.label_files = sorted((INPUT_DIR / label_dir).glob("*.tif"))
+        # self.label_files = sorted(Path(label_dir).glob("*.tif"))
         self.split = split
         self.num_augmentations = num_augmentations
         self.patch_size = patch_size
@@ -60,13 +61,17 @@ class Train_Val_Loader(Dataset):
         # Verify modalities & labels have same number of images
         label_len = len(self.label_files)
         for name, (before_dir, after_dir) in modalities.items():
-            before_files = sorted(Path(before_dir).glob("*.tif"))
-            after_files = sorted(Path(after_dir).glob("*.tif"))
+            before_files = sorted((INPUT_DIR / before_dir).glob("*.tif"))
+            after_files = sorted((INPUT_DIR / after_dir).glob("*.tif"))
+            print("After: ", str((INPUT_DIR / after_dir)))
+            print("Before: ", str((INPUT_DIR / before_dir)))
             if len(before_files) != len(after_files):
                 raise ValueError(f"Modality {name} before/after count mismatch")
             if len(before_files) != label_len:
                 raise ValueError(f"Modality {name} count differs from labels")
         self.num_images = label_len
+
+        print("Total labels: ", self.num_images)
 
         # Augmentation policy
         self.augment = None
@@ -82,6 +87,7 @@ class Train_Val_Loader(Dataset):
 
         # Precompute patch coordinates for all images
         self.index_map = self._build_patch_index_map()
+    print ("Init dataloader successfully.")
 
 # # ------------------- utility functions
     
@@ -133,8 +139,8 @@ class Train_Val_Loader(Dataset):
         for idx in range(self.num_images):
             image_dict = {}
             for name, (before_dir, after_dir) in self.modalities.items():
-                before_file = sorted(Path(before_dir).glob("*.tif"))[idx]
-                after_file = sorted(Path(after_dir).glob("*.tif"))[idx]
+                before_file = sorted((INPUT_DIR / before_dir).glob("*.tif"))[idx]
+                after_file = sorted((INPUT_DIR / after_dir).glob("*.tif"))[idx]
                 image_dict[name] = {
                     "before": self._load_tif(before_file),
                     "after": self._load_tif(after_file)
@@ -151,7 +157,7 @@ class Train_Val_Loader(Dataset):
         first_mod = next(iter(self.modalities.keys()))
         first_before_dir, _ = self.modalities[first_mod]
         for i in range(self.num_images):
-            ref_path = sorted(Path(first_before_dir).glob("*.tif"))[i]
+            ref_path = sorted((INPUT_DIR / first_before_dir).glob("*.tif"))[i]
             with rio.open(ref_path) as src:
                 #only dummy size is necessary for grid
                 dummy = torch.zeros((1, src.height, src.width), dtype=torch.float32)
@@ -176,8 +182,8 @@ class Train_Val_Loader(Dataset):
         else:
             data = {}
             for name, (before_dir, after_dir) in self.modalities.items():
-                before_file = sorted(Path(before_dir).glob("*.tif"))[i]
-                after_file = sorted(Path(after_dir).glob("*.tif"))[i]
+                before_file = sorted((INPUT_DIR / before_dir).glob("*.tif"))[i]
+                after_file = sorted((INPUT_DIR / after_dir).glob("*.tif"))[i]
                 data[name] = {
                     "before": self._load_tif(before_file),
                     "after": self._load_tif(after_file)

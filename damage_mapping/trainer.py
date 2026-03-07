@@ -20,7 +20,6 @@ from hydra.core.hydra_config import HydraConfig
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 CONFIG_DIR = "/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/configs/old_configs"
-
 @hydra.main(version_base = "1.2", config_path = CONFIG_DIR+"/train_val" , config_name = 'config')
 def main(cfg: DictConfig):
     hc = HydraConfig.get()
@@ -30,15 +29,26 @@ def main(cfg: DictConfig):
 
     #set seeds for replicability when using torch
     set_seeds(cfg.model.seed)
-    
+
     #getting data in usable format from config paths
     train_modalities = {
-        name: (paths.before, paths.after)
-        for name, paths in cfg.train_loader.modalities.items()}
+        name: (paths.before, paths.after) for name, paths in cfg.train_loader.modalities.items()}
     val_modalities = {
-        name: (paths.before, paths.after)
-        for name, paths in cfg.validation_loader.modalities.items()}
+        name: (paths.before, paths.after) for name, paths in cfg.validation_loader.modalities.items()}
+    # modalities:
+    #     S2L2A:
+    #         before: Images_small/Before/S2L2A
+    #         after: Images_small/After/S2L2A
+    #     S1GRD:
+    #         before: Images_small/Before/S1GRD
+    #         after: Images_small/After/S1GRD
+    # label_dir: Images_small/Relabeled
     
+    # train_modalities = {
+    #     "S2L2A" :('Images_small/Before/S2L2A', 'Images_small/After/S2L2A'), 
+    #     "S1GRD" :('Images_small/Before/S1GRD', 'Images_small/After/S1GRD')
+    #     }
+
 # ------------------------------Loading in data & setting up model  --------------------------------------- #    
     #set up train and validation datasets using our dataloader function
     train_data = Train_Val_Loader(modalities = train_modalities,
@@ -48,6 +58,10 @@ def main(cfg: DictConfig):
         patch_size = cfg.train_loader.patch_size,
         stride = cfg.train_loader.stride,
         preload = cfg.train_loader.preload)
+
+    print(">> I am here : ")
+    print(len(train_data))
+    print(train_data.__len__)
     # Torch dataloader tool for batching etc.
     train_dataloader = DataLoader(train_data, 
                                   batch_size = cfg.train_loader.batch_size,

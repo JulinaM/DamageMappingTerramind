@@ -5,11 +5,11 @@
 #SBATCH --gpus-per-node=1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=1
-#SBATCH --time=00:03:00
+#SBATCH --cpus-per-task=2
+#SBATCH --time=00:10:00
 #SBATCH --mem=16G
-#SBATCH --output=/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/slurm_logs/%x_%j.out
-#SBATCH --error=/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/slurm_logs/%x_%j.err
+#SBATCH --output=/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/slurm_logs/%x_%j.out
+#SBATCH --error=/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/slurm_logs/%x_%j.err
 
 # USAGE:: sbatch --export=JOB_TYPE=train terramind.slurm
 JOB_TYPE=${JOB_TYPE:-train}
@@ -46,6 +46,13 @@ case $JOB_TYPE in
   train)
     # torchrun --nproc_per_node=1 ../damage_mapping/run_exp.py --config-name=train --wandb_name="$wandb_name"
     python3 ${proj_dir}/damage_mapping/trainer.py
+    
+    # srun \
+    #     --cpus-per-task=1 \
+    #     --job-name="terramind_train" \
+    #     --output="/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/slurm_logs/terramind_train.out" \
+    #     --error="/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/slurm_logs/terramind_train.err" \
+    #     python ${proj_dir}/damage_mapping/trainer.py 
     ;;
     
   evaluate)
