@@ -12,6 +12,7 @@
 #SBATCH --error=/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/slurm_logs/%x_%j.err
 
 # USAGE:: sbatch --export=JOB_TYPE=train terramind.slurm
+# USAGE:: sbatch --export=JOB_TYPE=train_debug slurm/terramind.slurm
 JOB_TYPE=${JOB_TYPE:-train}
 
 module purge
@@ -54,7 +55,15 @@ case $JOB_TYPE in
     #     --error="/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/slurm_logs/terramind_train.err" \
     #     python ${proj_dir}/damage_mapping/trainer.py 
     ;;
-    
+  train_debug)
+    python3 ${proj_dir}/damage_mapping/trainer.py \
+      model.modalities=[S2L2A] \
+      '~train_loader.modalities.S1GRD' \
+      '~validation_loader.modalities.S1GRD' \
+      model.num_classes=4
+
+  ;;
+
   evaluate)
     CUDA_VISIBLE_DEVICES=0 accelerate launch ${proj_dir}/damage_mapping/run_exp.py --config-name=evaluate --wandb_name="$WANDB_NAME"
     ;;
