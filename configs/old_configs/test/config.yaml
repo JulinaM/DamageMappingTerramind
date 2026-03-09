@@ -1,0 +1,17 @@
+defaults:
+  - paths: base
+  - model: base
+
+writer:
+  base_dir: Juls-test
+  test_name: "test1"
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+    dir: multirun/${writer.base_dir}/${writer.test_name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
+  output_subdir: null
+  sweeper:
+    params:
+      paths.trained_model: /users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/multirun/Juls/2026-03-08/20-08-25/0/checkpoints/best_model_epoch4_valloss0.7901.pt

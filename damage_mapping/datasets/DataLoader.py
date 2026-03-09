@@ -87,7 +87,7 @@ class Train_Val_Loader(Dataset):
 
         # Precompute patch coordinates for all images
         self.index_map = self._build_patch_index_map()
-    print ("Init dataloader successfully.")
+        print ("Init dataloader successfully.")
 
 # # ------------------- utility functions
     
@@ -262,12 +262,22 @@ class TestLoader(Dataset):
         self.patch_size = patch_size
         self.stride = stride
     
-        #Check to make sure same number of files in before/after for both modalities. Also check for labels if provided
-        self.label_files = sorted(Path(label_dir).glob("*.tif"))
+        # Resolve relative paths from the project input root used by train/val loader.
+        self.label_dir = self._resolve_dir(label_dir)
+        self.modality_dirs = {
+            name: (self._resolve_dir(before_dir), self._resolve_dir(after_dir))
+            for name, (before_dir, after_dir) in modalities.items()
+        }
+
+        # Check counts across labels and each modality pair.
+        self.label_files = sorted(self.label_dir.glob("*.tif"))
         label_len = len(self.label_files)
-        for name, (before_dir, after_dir) in modalities.items():
-            before_files = sorted(Path(before_dir).glob("*.tif"))
-            after_files = sorted(Path(after_dir).glob("*.tif"))
+        if label_len == 0:
+            raise ValueError(f"No test labels found in: {self.label_dir}")
+
+        for name, (before_dir, after_dir) in self.modality_dirs.items():
+            before_files = sorted(before_dir.glob("*.tif"))
+            after_files = sorted(after_dir.glob("*.tif"))
             if len(before_files) != len(after_files):
                 raise ValueError(f"Modality {name} before/after count mismatch")
             if len(before_files) != label_len:
@@ -279,6 +289,9 @@ class TestLoader(Dataset):
 
 
 # # ---------------- setting up utility functions
+    def _resolve_dir(self, path_like):
+        path = Path(path_like)
+        return path if path.is_absolute() else INPUT_DIR / path
     
     def _pad_image(self, img):
         if not img.is_floating_point():
@@ -321,10 +334,10 @@ class TestLoader(Dataset):
     def _build_patch_index_map(self):
         index_map = []
         # Use the first modality as shape reference
-        first_mod = next(iter(self.modalities.keys()))
-        first_before_dir, _ = self.modalities[first_mod]
+        first_mod = next(iter(self.modality_dirs.keys()))
+        first_before_dir, _ = self.modality_dirs[first_mod]
         for i in range(self.num_images):
-            ref_path = sorted(Path(first_before_dir).glob("*.tif"))[i]
+            ref_path = sorted(first_before_dir.glob("*.tif"))[i]
             with rio.open(ref_path) as src:
                 dummy = torch.zeros((1, src.height, src.width), dtype=torch.float32)
                 dummy, _ = self._pad_image(dummy)
@@ -343,9 +356,9 @@ class TestLoader(Dataset):
 
         data = {}
         meta = None
-        for name, (before_dir, after_dir) in self.modalities.items():
-            before_file = sorted(Path(before_dir).glob("*.tif"))[i]
-            after_file = sorted(Path(after_dir).glob("*.tif"))[i]
+        for name, (before_dir, after_dir) in self.modality_dirs.items():
+            before_file = sorted(before_dir.glob("*.tif"))[i]
+            after_file = sorted(after_dir.glob("*.tif"))[i]
             
             # Save metadata from the first file type (doesnt matter as long as same index)
             if meta is None:

@@ -61,12 +61,16 @@ case $JOB_TYPE in
       '~train_loader.modalities.S1GRD' \
       '~validation_loader.modalities.S1GRD' \
       model.num_classes=4
-
   ;;
 
   evaluate)
-    CUDA_VISIBLE_DEVICES=0 accelerate launch ${proj_dir}/damage_mapping/run_exp.py --config-name=evaluate --wandb_name="$WANDB_NAME"
-    ;;
+    # srun --job-name="terramind_eval" \
+      python3 ${proj_dir}/damage_mapping/evaluator.py 
+  ;;
+
+  # evaluate)
+  #   CUDA_VISIBLE_DEVICES=0 accelerate launch ${proj_dir}/damage_mapping/run_exp.py --config-name=evaluate --wandb_name="$WANDB_NAME"
+  #   ;;
 
   *)
     echo "ERROR: Invalid job type '$JOB_TYPE'. Valid options: {train|evaluate}"
