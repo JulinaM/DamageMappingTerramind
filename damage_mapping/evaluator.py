@@ -14,6 +14,7 @@ from models.Encoder_TerraMind import TerraMindEncoder
 from models.Decoder_UNet2D import UNet2D
 from models.utils import move_to_device, calc_test_metrics, tensor_to_color_image
 from datasets.DataLoader import TestLoader
+from logger import init_logger
 
 
 CONFIG_DIR = "/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/configs/old_configs/test"
@@ -158,6 +159,7 @@ def _save_geotiffs(output_dir, image_tiles_pred, metas):
             dst.write(pred_np, 1)
             dst.write_colormap(1, COLOR_TABLE)
 
+    return tiff_dir
 
 def _save_metrics_and_visualizations(output_dir, image_tiles_pred, image_tiles_true, writer):
     test_metrics = calc_test_metrics(
@@ -167,7 +169,6 @@ def _save_metrics_and_visualizations(output_dir, image_tiles_pred, image_tiles_t
         positive_class=2,
         negative_class=1,
     )
-    print(test_metrics)
 
     metrics_path = os.path.join(output_dir, "metrics.txt")
     with open(metrics_path, "w") as f:
@@ -183,32 +184,63 @@ def _save_metrics_and_visualizations(output_dir, image_tiles_pred, image_tiles_t
         combined = torch.cat((true_rgb, pred_rgb), dim=2)
         writer.add_image(f"comparison/{idx}", combined)
 
+    return test_metrics, metrics_path
+
 
 @hydra.main(version_base="1.2", config_path=CONFIG_DIR, config_name="config")
 def main(cfg: DictConfig):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     output_dir = _get_output_dir()
-    print(output_dir)
+    logger = init_logger(
+        filepath=os.path.join(output_dir, "evaluator.log"),
+        rank=0,
+        add_rank_suffix=False,
+        use_console=False,
+    )
+    logger.info("Evaluator started")
+    logger.info("Output directory: %s", output_dir)
+    logger.info("Device: %s", device)
+    logger.info("Model checkpoint: %s", cfg.paths.trained_model)
+    logger.info("Eval modalities: %s", EVAL_MODALITIES)
+    logger.info("Patch size=%s, stride=%s", cfg.model.patch_size, cfg.model.stride)
 
     writer = SummaryWriter(log_dir=output_dir)
     try:
+        logger.info("Building test dataloader")
         test_dataloader = _build_test_loader(cfg)
+        logger.info("Total test patches: %d", len(test_dataloader.dataset))
+
+        logger.info("Loading encoder/decoder")
         encoder, decoder = _load_models(cfg, device)
+
+        logger.info("Running inference and collecting patches")
         tile_reconstruction, padding, metas = _collect_patch_outputs(test_dataloader, encoder, decoder, device)
         if not tile_reconstruction:
             raise RuntimeError(
                 "No test patches were generated. Check paths.modalities/label_dir and input data availability."
             )
+        logger.info("Collected patches for %d image tile(s)", len(tile_reconstruction))
 
         image_tiles_true, image_tiles_pred = _reconstruct_tiles(tile_reconstruction, cfg.model.patch_size)
         _remove_padding(image_tiles_true, padding)
         _remove_padding(image_tiles_pred, padding)
         _mask_background_predictions(image_tiles_pred, image_tiles_true)
+        logger.info("Reconstructed and postprocessed %d image tile(s)", len(image_tiles_pred))
 
-        _save_geotiffs(output_dir, image_tiles_pred, metas)
-        _save_metrics_and_visualizations(output_dir, image_tiles_pred, image_tiles_true, writer)
+        tiff_dir = _save_geotiffs(output_dir, image_tiles_pred, metas)
+        logger.info("Saved %d GeoTIFF(s) to %s", len(image_tiles_pred), tiff_dir)
+
+        test_metrics, metrics_path = _save_metrics_and_visualizations(output_dir, image_tiles_pred, image_tiles_true, writer)
+        logger.info("Saved metrics to %s", metrics_path)
+        logger.info("Per-image metrics: %s", test_metrics)
+        logger.info("TensorBoard event file written under %s", output_dir)
+        logger.info("Evaluator completed successfully")
+    except Exception:
+        logger.exception("Evaluator failed")
+        raise
     finally:
         writer.close()
+        logger.info("Closed TensorBoard writer")
 
 if __name__ == "__main__":
     main()

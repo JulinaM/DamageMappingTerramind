@@ -1,5 +1,6 @@
 import logging
 import time
+import sys
 
 from datetime import timedelta
 
@@ -21,17 +22,19 @@ class LogFormatter:
         return "%s - %s" % (prefix, message) if message else ""
 
 
-def init_logger(filepath, rank):
+def init_logger(filepath, rank, add_rank_suffix=True, use_console=True, console_to_stdout=True):
     log_formatter = LogFormatter()
 
     if filepath is not None:
-        filepath = "%s-%i" % (filepath, rank)
+        if add_rank_suffix:
+            filepath = "%s-%i" % (filepath, rank)
         file_handler = logging.FileHandler(filepath, "w")
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(log_formatter)
 
-    if rank == 0:
-        console_handler = logging.StreamHandler()
+    if rank == 0 and use_console:
+        stream = sys.stdout if console_to_stdout else None
+        console_handler = logging.StreamHandler(stream=stream)
         console_handler.setLevel(logging.INFO)
         console_handler.setFormatter(log_formatter)
 
@@ -42,7 +45,7 @@ def init_logger(filepath, rank):
     if filepath is not None:
         logger.addHandler(file_handler)
 
-    if rank == 0:
+    if rank == 0 and use_console:
         logger.addHandler(console_handler)
 
     def reset_time():

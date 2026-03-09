@@ -3,7 +3,7 @@ defaults:
   - model: base
 
 writer:
-  base_dir: Juls-test
+  base_dir: Juls-eval
   test_name: "test1"
 
 hydra:
@@ -14,4 +14,4 @@ hydra:
   output_subdir: null
   sweeper:
     params:
-      paths.trained_model: /users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/multirun/Juls/2026-03-08/20-08-25/0/checkpoints/best_model_epoch4_valloss0.7901.pt
+      paths.trained_model: /users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/multirun/Juls-train/2026-03-09/15-22-41/0/checkpoints/best_model_epoch4_valloss0.7901.pt

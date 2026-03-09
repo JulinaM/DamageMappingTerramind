@@ -9,10 +9,12 @@ import random, math
 from functools import lru_cache
 import warnings
 import os
+import logging
 
 from models.utils import standardize, RandomFlipPair, RandomRotationPair
 
 INPUT_DIR = Path("/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/input/")
+LOGGER = logging.getLogger(__name__)
 
 class Train_Val_Loader(Dataset):
     def __init__(
@@ -48,7 +50,7 @@ class Train_Val_Loader(Dataset):
             warnings.warn(f"Caution: with stride > 224, some pixels may not be seen by the model.",UserWarning)
 
         self.modalities = modalities
-        print(str(INPUT_DIR / label_dir))
+        LOGGER.info("Train/val label dir: %s", str(INPUT_DIR / label_dir))
         self.label_files = sorted((INPUT_DIR / label_dir).glob("*.tif"))
         # self.label_files = sorted(Path(label_dir).glob("*.tif"))
         self.split = split
@@ -63,15 +65,15 @@ class Train_Val_Loader(Dataset):
         for name, (before_dir, after_dir) in modalities.items():
             before_files = sorted((INPUT_DIR / before_dir).glob("*.tif"))
             after_files = sorted((INPUT_DIR / after_dir).glob("*.tif"))
-            print("After: ", str((INPUT_DIR / after_dir)))
-            print("Before: ", str((INPUT_DIR / before_dir)))
+            LOGGER.info("Modality %s after dir: %s", name, str(INPUT_DIR / after_dir))
+            LOGGER.info("Modality %s before dir: %s", name, str(INPUT_DIR / before_dir))
             if len(before_files) != len(after_files):
                 raise ValueError(f"Modality {name} before/after count mismatch")
             if len(before_files) != label_len:
                 raise ValueError(f"Modality {name} count differs from labels")
         self.num_images = label_len
 
-        print("Total labels: ", self.num_images)
+        LOGGER.info("Total labels: %d", self.num_images)
 
         # Augmentation policy
         self.augment = None
@@ -87,7 +89,7 @@ class Train_Val_Loader(Dataset):
 
         # Precompute patch coordinates for all images
         self.index_map = self._build_patch_index_map()
-        print ("Init dataloader successfully.")
+        LOGGER.info("Initialized train/val dataloader successfully")
 
 # # ------------------- utility functions
     

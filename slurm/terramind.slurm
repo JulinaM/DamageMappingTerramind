@@ -8,73 +8,87 @@
 #SBATCH --cpus-per-task=2
 #SBATCH --time=00:10:00
 #SBATCH --mem=16G
-#SBATCH --output=/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/slurm_logs/%x_%j.out
-#SBATCH --error=/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/slurm_logs/%x_%j.err
+#SBATCH --output=/dev/null
+#SBATCH --error=/dev/null
 
-# USAGE:: sbatch --export=JOB_TYPE=train terramind.slurm
-# USAGE:: sbatch --export=JOB_TYPE=train_debug slurm/terramind.slurm
+set -Eeuo pipefail
+
+## USAGE::
+# Minimal (default): sbatch --export=JOB_TYPE=train slurm/terramind.slurm
+# Debug infra logs: sbatch --export=JOB_TYPE=train,SLURM_LOG_LEVEL=debug slurm/terramind.slurm
+
 JOB_TYPE=${JOB_TYPE:-train}
+SLURM_LOG_LEVEL="${SLURM_LOG_LEVEL:-minimal}"  # minimal|debug
+PROJ_DIR="/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2"
+cd "${PROJ_DIR}"
+LOG_DIR="${PROJ_DIR}/data/slurm_logs"
 
-module purge
-module load cuda/12.4.1
-module load miniconda3/24.1.2-py310
+case "${JOB_TYPE}" in
+  train) LOG_STEM="terramind-train" ;;
+  eval) LOG_STEM="terramind-eval" ;;
+  train_debug) LOG_STEM="terramind-train-debug" ;;
+  *) LOG_STEM="terramind-${JOB_TYPE//_/-}" ;;
+esac
+
+mkdir -p "${LOG_DIR}"
+exec > "${LOG_DIR}/${LOG_STEM}_${SLURM_JOB_ID}.out" 2> "${LOG_DIR}/${LOG_STEM}_${SLURM_JOB_ID}.err"
+
+timestamp() { date +"%Y-%m-%d %H:%M:%S %Z"; }
+log() { echo "[SLURM $(timestamp)] $*"; }
+
+on_error() {
+  local exit_code=$?
+  >&2 echo "[SLURM $(timestamp)] ERROR: command failed (exit=${exit_code}) at line ${BASH_LINENO[0]}"
+  >&2 echo "[SLURM $(timestamp)] ERROR: ${BASH_COMMAND}"
+  >&2 echo "[SLURM $(timestamp)] Job '${JOB_TYPE}' failed"
+  exit "${exit_code}"
+}
+trap on_error ERR
+
+# Reproducible environment setup.
+module --force purge
+module load cuda/12.4.1 miniconda3/24.1.2-py310
 source activate lora
 
-echo "====== JOB INFO ======"
-echo "Job ID: $SLURM_JOB_ID"
-echo "Job Type: ${JOB_TYPE}"
-echo "Working dir : $(pwd)"
-echo "Hostname : $(hostname)"
-echo "Date : $(date)"
-echo "Python : $(which python3)"
 
-echo "===== GPU INFO ====="
-nvidia-smi
-python3 - <<EOF
-import torch
-print("Torch:", torch.__version__)
-print("CUDA available:", torch.cuda.is_available())
-print("GPU count:", torch.cuda.device_count())
-EOF
+log ">> Job start | id=${SLURM_JOB_ID} type=${JOB_TYPE} host=$(hostname)"
 
+if [[ "${SLURM_LOG_LEVEL}" == "debug" ]]; then
+  log "pwd=$(pwd)"
+  log "python=$(which python3)"
+  nvidia-smi
+fi
 
+# Better traceback formatting for Hydra exceptions.
+export HYDRA_FULL_ERROR=1
 
-# WANDB_NAME="${JOB_TYPE}--juls"
-proj_dir="/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/"
-
-echo "Executing command for job type: $JOB_TYPE"
 case $JOB_TYPE in
   train)
-    # torchrun --nproc_per_node=1 ../damage_mapping/run_exp.py --config-name=train --wandb_name="$wandb_name"
-    python3 ${proj_dir}/damage_mapping/trainer.py
-    
-    # srun \
-    #     --cpus-per-task=1 \
-    #     --job-name="terramind_train" \
-    #     --output="/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/slurm_logs/terramind_train.out" \
-    #     --error="/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/slurm_logs/terramind_train.err" \
-    #     python ${proj_dir}/damage_mapping/trainer.py 
+    CMD=(python3 -u "${PROJ_DIR}/damage_mapping/trainer.py")
     ;;
   train_debug)
-    python3 ${proj_dir}/damage_mapping/trainer.py \
-      model.modalities=[S2L2A] \
-      '~train_loader.modalities.S1GRD' \
-      '~validation_loader.modalities.S1GRD' \
-      model.num_classes=4
-  ;;
+    CMD=(
+      python3 -u "${PROJ_DIR}/damage_mapping/trainer.py"
+      "model.modalities=[S2L2A]"
+      "~train_loader.modalities.S1GRD"
+      "~validation_loader.modalities.S1GRD"
+      "model.num_classes=4"
+    )
+    ;;
 
-  evaluate)
-    # srun --job-name="terramind_eval" \
-      python3 ${proj_dir}/damage_mapping/evaluator.py 
-  ;;
-
-  # evaluate)
-  #   CUDA_VISIBLE_DEVICES=0 accelerate launch ${proj_dir}/damage_mapping/run_exp.py --config-name=evaluate --wandb_name="$WANDB_NAME"
-  #   ;;
+  eval)
+    CMD=(python3 -u "${PROJ_DIR}/damage_mapping/evaluator.py")
+    ;;
 
   *)
-    echo "ERROR: Invalid job type '$JOB_TYPE'. Valid options: {train|evaluate}"
+    >&2 echo "ERROR: Invalid job type '${JOB_TYPE}'. Valid options: {train|train_debug|eval}"
+    exit 2
     ;;
 esac
 
-echo "====== Job '$JOB_TYPE' finished at $(date) ======"
+if [[ "${SLURM_LOG_LEVEL}" == "debug" ]]; then
+  log "cmd=${CMD[*]}"
+fi
+"${CMD[@]}"
+
+log ">> Job done | id=${SLURM_JOB_ID} type=${JOB_TYPE}"
