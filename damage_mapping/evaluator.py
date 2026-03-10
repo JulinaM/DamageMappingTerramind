@@ -1,15 +1,14 @@
 import os
-from collections import defaultdict
-
 import hydra
+import torch
 import numpy as np
 import rasterio as rio
-import torch
+
+from collections import defaultdict
 from hydra.core.hydra_config import HydraConfig
 from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-
 from models.Encoder_TerraMind import TerraMindEncoder
 from models.Decoder_UNet2D import UNet2D
 from models.utils import move_to_device, calc_test_metrics, tensor_to_color_image

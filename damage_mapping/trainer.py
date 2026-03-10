@@ -1,22 +1,18 @@
-#stop `albumentations` info, TerraTorch relies on 1.4
-import logging
-logging.getLogger("albumentations").setLevel(logging.ERROR)
-
-from datasets.DataLoader import Train_Val_Loader
-from models.utils import weights, calc_batch_metrics, calc_epoch_metrics, move_to_device, set_seeds, save_checkpoint
-from models.Decoder_UNet2D import UNet2D
-from models.Encoder_TerraMind import TerraMindEncoder
-from logger import init_logger
-
+import os
+import hydra
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-import os
-import hydra
+
 from omegaconf import DictConfig, OmegaConf
 from hydra.core.hydra_config import HydraConfig
+from datasets.DataLoader import Train_Val_Loader
+from models.utils import weights, calc_batch_metrics, calc_epoch_metrics, move_to_device, set_seeds, save_checkpoint
+from models.Decoder_UNet2D import UNet2D
+from models.Encoder_TerraMind import TerraMindEncoder
+from logger import init_logger
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
