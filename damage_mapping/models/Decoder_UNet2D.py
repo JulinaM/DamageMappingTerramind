@@ -1,114 +1,111 @@
+from typing import Sequence
+
 import torch
 import torch.nn as nn
 from terratorch.models import necks
 
+
+class ConvBlock(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int) -> None:
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.block(x)
+
+
+class UpBlock(nn.Module):
+    def __init__(self, in_channels: int, skip_channels: int, out_channels: int) -> None:
+        super().__init__()
+        self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
+        self.conv = ConvBlock(out_channels + skip_channels, out_channels)
+
+    def forward(self, x: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
+        x = self.up(x)
+        x = torch.cat([x, skip], dim=1)
+        return self.conv(x)
+
+
 class UNet2D(nn.Module):
-    def __init__(self, num_classes = 3):
+    """
+    U-Net style segmentation decoder for TerraMind token features.
+
+    Expects a list of token tensors from the encoder, selects multi-scale indices,
+    reshapes tokens to images, then decodes to pixel logits.
+    """
+
+    def __init__(
+        self,
+        num_classes: int = 3,
+        token_dim: int = 768,
+        indices: Sequence[int] = (3, 5, 7, 9, 11),
+        decoder_channels: Sequence[int] = (64, 128, 256, 512, 1024),
+        remove_cls_token: bool = False,
+    ) -> None:
         super().__init__()
 
-        """Set up for the base version of Terramind, accepting outputs from transformer heads [3,5,7,9,11] from heads 0-11
-            This uses the right side of U Net where we expand the compressed images. 
-            The last transformer output (11) starts at the bottom of the U Net, while the other layers are used as skip connections
-            
-            Outputs logits, for likelihood of each pixel belonging to one of the classes
+        if len(indices) != len(decoder_channels):
+            raise ValueError("`indices` and `decoder_channels` must have the same length.")
+        if len(indices) < 2:
+            raise ValueError("Decoder requires at least two feature scales.")
 
-        Args:
-            TerraMind differenced embeddings in train.py or test.py
-        """
+        self.indices = list(indices)
+        self.decoder_channels = list(decoder_channels)
+        n_levels = len(self.indices)
+        channel_list = [token_dim] * n_levels
 
-        
-        # -------------- Neck Portion -------------- #
-        self.select_indices = necks.SelectIndices(
-            channel_list=[768, 768, 768, 768, 768],
-            indices=[3, 5, 7, 9, 11])
-
+        self.select_indices = necks.SelectIndices(channel_list=channel_list, indices=self.indices)
         self.reshape_tokens = necks.ReshapeTokensToImage(
-            channel_list=[768, 768, 768, 768, 768],
-            remove_cls_token=False)
+            channel_list=channel_list,
+            remove_cls_token=remove_cls_token,
+        )
 
-        # Project the representations to fit as the skip layers which will connect to 
-        self.projections = nn.ModuleList([
-            nn.Conv2d(768, 64, kernel_size=1), #index 3
-            nn.Conv2d(768, 128, kernel_size=1), #index 5
-            nn.Conv2d(768, 256, kernel_size=1), #index 7
-            nn.Conv2d(768, 512, kernel_size=1), #index 9
-            nn.Conv2d(768, 1024, kernel_size=1)]) #index 11
+        self.projections = nn.ModuleList(
+            [nn.Conv2d(token_dim, out_ch, kernel_size=1) for out_ch in self.decoder_channels]
+        )
 
-        # Per-level upsampling
-        self.upsamplers = nn.ModuleList([
-            nn.Upsample(scale_factor=16, mode="bilinear", align_corners=False),  #index 3
-            nn.Upsample(scale_factor=8, mode="bilinear", align_corners=False),  #index 5
-            nn.Upsample(scale_factor=4, mode="bilinear", align_corners=False),  #index 7
-            nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False),  #index 9
-            nn.Identity()]) #index 11
-        
-        
-        # -------------- U Net Portion -------------- #
-        self.relu = nn.ReLU()
-        
-        # block 4 up
-        self.conv2d_0 = nn.Conv2d(1024, 1024, kernel_size=3, padding = 1)
-        self.up_conv0 = nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=2, stride=2)
+        self.upsamplers = nn.ModuleList(
+            [
+                nn.Identity()
+                if i == n_levels - 1
+                else nn.Upsample(scale_factor=2 ** (n_levels - 1 - i), mode="bilinear", align_corners=False)
+                for i in range(n_levels)
+            ]
+        )
 
-        # block 3 up
-        self.conv2d_1a = nn.Conv2d(1024, 512, kernel_size=3, padding = 1)
-        self.conv2d_1b = nn.Conv2d(512, 512, kernel_size=3, padding = 1)
-        self.up_conv1 = nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=2, stride=2)        
+        self.bottom = ConvBlock(self.decoder_channels[-1], self.decoder_channels[-1])
+        self.up_blocks = nn.ModuleList()
+        curr_channels = self.decoder_channels[-1]
+        for skip_channels in reversed(self.decoder_channels[:-1]):
+            self.up_blocks.append(
+                UpBlock(
+                    in_channels=curr_channels,
+                    skip_channels=skip_channels,
+                    out_channels=skip_channels,
+                )
+            )
+            curr_channels = skip_channels
 
-        # block 2 up
-        self.conv2d_2a = nn.Conv2d(512, 256, kernel_size=3, padding = 1)
-        self.conv2d_2b = nn.Conv2d(256, 256, kernel_size=3, padding = 1)
-        self.up_conv2 = nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=2, stride=2)
-
-        # block 1 up
-        self.conv2d_3a = nn.Conv2d(256, 128, kernel_size=3, padding =1 )
-        self.conv2d_3b = nn.Conv2d(128, 128, kernel_size=3, padding =1)
-        self.up_conv3 = nn.ConvTranspose2d(in_channels=128, out_channels=64, kernel_size=2, stride=2)
-
-        # block 0 up
-        self.conv2d_4a = nn.Conv2d(128, 64, kernel_size=3, padding =1)
-        self.conv2d_4b = nn.Conv2d(64, 64, kernel_size=3, padding =1)
-        self.conv2d_4c = nn.Conv2d(64, num_classes, kernel_size=1)
+        self.head = nn.Conv2d(curr_channels, num_classes, kernel_size=1)
 
     def forward(self, embeddings):
-        # -------------- Neck Portion -------------- #
-        features = self.select_indices(embeddings)      # list of 4 tensors
-        features = self.reshape_tokens(features)           # reshape each to (B, C, H, W)
+        features = self.select_indices(embeddings)
+        features = self.reshape_tokens(features)
 
-        feature_list = []
-        for f, proj, up in zip(features, self.projections, self.upsamplers):
-            f = proj(f) 
-            f = up(f)
-            feature_list.append(f)
-        index3, index5, index7, index9, index11 = feature_list 
+        projected = []
+        for feature, projection, upsample in zip(features, self.projections, self.upsamplers):
+            projected.append(upsample(projection(feature)))
 
-        # -------------- U Net Portion -------------- #
-        # block 5
-        x = self.relu(self.conv2d_0(index11))
-        x = self.up_conv0(x)
+        x = self.bottom(projected[-1])
+        skips = projected[:-1]
+        for up_block, skip in zip(self.up_blocks, reversed(skips)):
+            x = up_block(x, skip)
 
-        # block 4
-        x = torch.cat([x, index9], 1)
-        x = self.relu(self.conv2d_1a(x))
-        x = self.relu(self.conv2d_1b(x))
-        x = self.up_conv1(x)
-
-        # block 3 
-        x = torch.cat([x, index7], 1)
-        x = self.relu(self.conv2d_2a(x))
-        x = self.relu(self.conv2d_2b(x))
-        x = self.up_conv2(x)
-
-        # block 2
-        x = torch.cat([x, index5], 1)
-        x = self.relu(self.conv2d_3a(x))
-        x = self.relu(self.conv2d_3b(x))
-        x = self.up_conv3(x)
-
-        # block 1 
-        x = torch.cat([x, index3], 1)
-        x = self.relu(self.conv2d_4a(x))
-        x = self.relu(self.conv2d_4b(x))
-        logits = self.conv2d_4c(x)
-    
-        return logits
+        return self.head(x)

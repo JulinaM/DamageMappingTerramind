@@ -1,68 +1,69 @@
 defaults:
   - base
   - _self_
-  - model: terramind
 
-model:
-  _target_: damage_mapping.models.terramind.TerraMindEncoder
-  num_predictands: 1
-  finetune: false
-  output_layers: [3, 5, 7, 9, 11]
-  bilinear: false
+job_type: train_eval
 
-dataset:
-  _target_: damage_mapping.datasets.sentinel2
-  root_path: ${hydra:runtime.cwd}/data/input/images
+train_loader: 
+  modalities:
+    S2L2A:
+      before: Images_small/Before/S2L2A
+      after: Images_small/After/S2L2A
+    S1GRD:
+      before: Images_small/Before/S1GRD
+      after: Images_small/After/S1GRD
+  label_dir: Images_small/Relabeled
   num_augmentations: 2
-  input_size: 224
+  patch_size: 224
   stride: 224
   preload: False
   batch_size: 4
   shuffle: True
   num_workers: 2
 
+validation_loader: 
+  modalities:
+    S2L2A:
+      before: Images_small/Before/S2L2A
+      after: Images_small/After/S2L2A
+    S1GRD:
+      before: Images_small/Before/S1GRD
+      after: Images_small/After/S1GRD
+  label_dir: Images_small/Relabeled
+  patch_size: 224
+  stride: 224
+  preload: False
+  batch_size: 4
+  shuffle: True
+  num_workers: 2
+
+holdout_loader:
+  modalities:
+    S2L2A:
+      before: Images_large/Test/Before/S2L2A
+      after: Images_large/Test/After/S2L2A
+  label_dir: Images_large/Test/Labels
+  patch_size: 224
+  stride: 224
+  num_workers: 2
+
+model: 
+  num_classes: 4
+  apply_weight_loss: False
+  weight_type: inverse
+  ignore_index : 0
+  positive_class: 2
+  negative_class: 1
+  TM_version: "terramind_v1_base"
+  pretrained: True
+  modalities: ["S2L2A", "S1GRD"]
+  TM_finetune: False
+  learning_rate: 0.0005
+  num_epochs: 2
+  seed: 22
+
 trainer:
-  _target_: damage_mapping.trainer.Trainer
-  n_epochs: 256
-  ckpt_interval: 32
-  eval_interval: 16
+  n_epochs: 1
   log_interval: 1
-  best_metric_key: 'RMSE'
-  precision: fp32
-
-optimizer:
-  _target_: torch.optim.AdamW
-  lr: 0.00001
-  weight_decay: 0.00001
-  betas: [0.9, 0.999]
-
-lr_scheduler:
-  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
-  T_max: 8092
-  last_epoch: -1
-
-criterion:
-  _target_: torch.nn.HuberLoss
-  reduction: 'none'
-
-activation:
-  _target_: torch.nn.Sigmoid
-
-evaluator:
-  _target_: mod_res_damage.evaluator.Evaluator
-  inference_mode: random
-  inference_batch: 64
-  num_monte_carlo: 256
-  save_output: true
-  task: regression
   
-use_wandb: true
-num_workers: 0
-use_final_ckpt: true
-find_unused_parameters: false
-pin_memory: false
-persistent_workers: false
-
-train_batch_size: 8
-test_batch_size: 1
-
+use_wandb: false

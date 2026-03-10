@@ -1,4 +1,4 @@
-experiment_name: ???
+experiment_name: "dev-runs"
 
 dry_run: False
 wandb:
@@ -7,9 +7,15 @@ wandb:
   entity: julinam
 
 hydra:
+  # mode: run
   run:
-    dir: ${hydra:runtime.cwd}/output/experiments/${hydra.job.config_name}_${experiment_name}_${now:%Y-%m-%d}_${now:%H%M%S}
-  sweeper:
-    params:
-      ++demo_param: test
-      ++seed: 42
+    # dir: ${hydra:runtime.cwd}/data/experiments/${hydra.job.config_name}_${experiment_name}_${now:%Y-%m-%d}_${now:%H%M%S}
+    dir: ${hydra:runtime.cwd}/data/experiments/${experiment_name}/${hydra.job.config_name}_${now:%Y-%m-%d}_${now:%H%M%S}
+    # dir: ${hydra:runtime.cwd}/data/experiments/${experiment_name}/${hydra.job.config_name}_${now:%Y-%m-%d}_${now:%H%M%S}_job${oc.env:SLURM_JOB_ID,local}
+  # sweeper:
+    # params:
+      # model.num_epochs: 5
+      # train_loader.num_augmentations: 5
+      # train_loader.batch_size: 20
+      # model.apply_weight_loss: False
+      # model.learning_rate: 0.0005

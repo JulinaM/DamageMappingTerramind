@@ -1,8 +1,6 @@
-./__pycache__/*
-./data/*
-./multirun/
-./slurm/arm.slurm
-./wandb
-./junk/
+./*/__pycache__/*
 ./configs/old_configs
-./slurm_logs/*
+./data/*
+./junk/*
+./multirun/
+./wandb

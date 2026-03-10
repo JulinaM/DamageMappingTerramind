@@ -17,16 +17,13 @@ set -Eeuo pipefail
 # Minimal (default): sbatch --export=JOB_TYPE=train slurm/terramind.slurm
 # Debug infra logs: sbatch --export=JOB_TYPE=train,SLURM_LOG_LEVEL=debug slurm/terramind.slurm
 
-JOB_TYPE=${JOB_TYPE:-train}
+JOB_TYPE=${JOB_TYPE:-train_eval} #train|eval|train_eval|train_debug
 SLURM_LOG_LEVEL="${SLURM_LOG_LEVEL:-minimal}"  # minimal|debug
 PROJ_DIR="/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2"
-cd "${PROJ_DIR}"
 LOG_DIR="${PROJ_DIR}/data/slurm_logs"
 
 case "${JOB_TYPE}" in
-  train) LOG_STEM="terramind-train" ;;
-  eval) LOG_STEM="terramind-eval" ;;
-  train_debug) LOG_STEM="terramind-train-debug" ;;
+  train_old) LOG_STEM="terramind-train-old" ;;
   *) LOG_STEM="terramind-${JOB_TYPE//_/-}" ;;
 esac
 
@@ -46,6 +43,7 @@ on_error() {
 trap on_error ERR
 
 # Reproducible environment setup.
+cd "${PROJ_DIR}"
 module --force purge
 module load cuda/12.4.1 miniconda3/24.1.2-py310
 source activate lora
@@ -54,6 +52,7 @@ source activate lora
 log ">> Job start | id=${SLURM_JOB_ID} type=${JOB_TYPE} host=$(hostname)"
 
 if [[ "${SLURM_LOG_LEVEL}" == "debug" ]]; then
+  echo
   log "pwd=$(pwd)"
   log "python=$(which python3)"
   nvidia-smi
@@ -63,10 +62,17 @@ fi
 export HYDRA_FULL_ERROR=1
 
 case $JOB_TYPE in
-  train)
-    CMD=(python3 -u "${PROJ_DIR}/damage_mapping/trainer.py")
+  train|eval|train_eval)
+    CMD=(
+      python3 -u -m damage_mapping
+      "job_type=${JOB_TYPE}"
+      "model.modalities=[S2L2A]"
+      "~train_loader.modalities.S1GRD"
+      "~validation_loader.modalities.S1GRD"
+    )
     ;;
-  train_debug)
+
+  train_old)
     CMD=(
       python3 -u "${PROJ_DIR}/damage_mapping/trainer.py"
       "model.modalities=[S2L2A]"
@@ -76,12 +82,8 @@ case $JOB_TYPE in
     )
     ;;
 
-  eval)
-    CMD=(python3 -u "${PROJ_DIR}/damage_mapping/evaluator.py")
-    ;;
-
   *)
-    >&2 echo "ERROR: Invalid job type '${JOB_TYPE}'. Valid options: {train|train_debug|eval}"
+    >&2 echo "ERROR: Invalid job type '${JOB_TYPE}'. Valid options: {train|train_eval|train_debug|eval}"
     exit 2
     ;;
 esac
@@ -91,4 +93,5 @@ if [[ "${SLURM_LOG_LEVEL}" == "debug" ]]; then
 fi
 "${CMD[@]}"
 
-log ">> Job done | id=${SLURM_JOB_ID} type=${JOB_TYPE}"
+echo
+echo "====== Job id=${SLURM_JOB_ID}  '$JOB_TYPE' finished successfully. ======"

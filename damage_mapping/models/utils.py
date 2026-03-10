@@ -153,7 +153,16 @@ def set_seeds(seed: int=22):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
 
-    
+def fix_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.cuda.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
 
 def save_checkpoint(encoder, decoder, optimizer, epoch, val_loss, cfg, save_dir="checkpoints"):
     """
@@ -179,13 +188,14 @@ def save_checkpoint(encoder, decoder, optimizer, epoch, val_loss, cfg, save_dir=
         'epoch': epoch,
         'encoder_state_dict': encoder.state_dict(),
         'decoder_state_dict': decoder.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict() if optimizer is not None else None,
         'val_loss': val_loss,
     }, checkpoint_path)
 
     cfg_path = os.path.join(save_dir, f"best_config_epoch{epoch}_valloss{val_loss:.4f}.yaml")
     OmegaConf.save(cfg, cfg_path)
     print(f"Saved new best checkpoint: {checkpoint_path}")
+    return checkpoint_path
 
 
 def calc_test_metrics(image_tiles_pred, image_tiles_true, ignore_index=0, positive_class=2, negative_class=1):
