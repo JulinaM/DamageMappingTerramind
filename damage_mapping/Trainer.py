@@ -3,21 +3,11 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-import torch.optim as optim
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from damage_mapping.datasets.DataLoader import Train_Val_Loader
-from damage_mapping.models.Decoder_UNet2D import UNet2D
-from damage_mapping.models.Encoder_TerraMind import TerraMindEncoder
-from damage_mapping.models.utils import (
-    calc_batch_metrics,
-    calc_epoch_metrics,
-    move_to_device,
-    save_checkpoint,
-    weights,
-)
+from damage_mapping.models.utils import calc_batch_metrics, calc_epoch_metrics, move_to_device, save_checkpoint
 
 
 class Trainer:
@@ -27,6 +17,12 @@ class Trainer:
         exp_dir: str | Path,
         ckpt_dir: str | Path,
         device: str | torch.device,
+        train_loader: DataLoader,
+        val_loader: DataLoader,
+        encoder: nn.Module,
+        decoder: nn.Module,
+        criterion: nn.Module,
+        optimizer,
         logger: logging.Logger | None = None,
         use_wandb: bool = False,
     ) -> None:
@@ -34,6 +30,12 @@ class Trainer:
         self.exp_dir = Path(exp_dir)
         self.ckpt_dir = Path(ckpt_dir)
         self.device = torch.device(device)
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.encoder = encoder
+        self.decoder = decoder
+        self.criterion = criterion
+        self.optimizer = optimizer
         self.logger = logger or logging.getLogger(__name__)
         self.use_wandb = use_wandb
         self.writer = SummaryWriter(log_dir=str(self.exp_dir))
@@ -45,11 +47,7 @@ class Trainer:
 
         self.n_epochs = int(getattr(self.trainer_cfg, "n_epochs", self.model_cfg.num_epochs))
         self.best_val_loss = float("inf")
-
-        self.train_loader, self.train_dataset = self._build_train_loader()
-        self.val_loader, self.val_dataset = self._build_validation_loader()
-        self.criterion = self._build_criterion()
-        self.encoder, self.decoder, self.optimizer, self.encoder_mode = self._build_training_components()
+        self.encoder_mode = self.encoder.train if self.model_cfg.TM_finetune else self.encoder.eval
 
     def train(self) -> None:
         self.logger.info("Trainer started")
@@ -58,6 +56,8 @@ class Trainer:
         self.logger.info("Model config: %s", OmegaConf.to_container(self.model_cfg, resolve=True))
         self.logger.info("Train loader config: %s", OmegaConf.to_container(self.train_cfg, resolve=True))
         self.logger.info("Validation loader config: %s", OmegaConf.to_container(self.val_cfg, resolve=True))
+        self.logger.info("Train batches: %d", len(self.train_loader))
+        self.logger.info("Validation batches: %d", len(self.val_loader))
         self.logger.info("Starting training for %d epoch(s)", self.n_epochs)
 
         try:
@@ -104,99 +104,9 @@ class Trainer:
                 false_negative += batch_metrics[2]
                 true_negative += batch_metrics[3]
 
-        val_loss = running_val_loss / len(self.val_dataset)
-        metrics = calc_epoch_metrics(
-            true_positive,
-            false_positive,
-            false_negative,
-            true_negative,
-        )
+        val_loss = running_val_loss / len(self.val_loader.dataset)
+        metrics = calc_epoch_metrics(true_positive, false_positive, false_negative, true_negative)
         return val_loss, metrics
-
-    def _build_train_loader(self) -> tuple[DataLoader, Train_Val_Loader]:
-        train_modalities = {
-            name: (paths.before, paths.after) for name, paths in self.train_cfg.modalities.items()
-        }
-        dataset = Train_Val_Loader(
-            modalities=train_modalities,
-            label_dir=self.train_cfg.label_dir,
-            split="train",
-            num_augmentations=self.train_cfg.num_augmentations,
-            patch_size=self.train_cfg.patch_size,
-            stride=self.train_cfg.stride,
-            preload=self.train_cfg.preload,
-        )
-        loader = DataLoader(
-            dataset,
-            batch_size=self.train_cfg.batch_size,
-            shuffle=self.train_cfg.shuffle,
-            num_workers=getattr(self.train_cfg, "num_workers", 0),
-        )
-        self.logger.info("Train patches: %d", len(dataset))
-        return loader, dataset
-
-    def _build_validation_loader(self) -> tuple[DataLoader, Train_Val_Loader]:
-        val_modalities = {
-            name: (paths.before, paths.after) for name, paths in self.val_cfg.modalities.items()
-        }
-        dataset = Train_Val_Loader(
-            modalities=val_modalities,
-            label_dir=self.val_cfg.label_dir,
-            split="validation",
-            patch_size=self.val_cfg.patch_size,
-            stride=self.val_cfg.stride,
-            preload=self.val_cfg.preload,
-        )
-        loader = DataLoader(
-            dataset,
-            batch_size=self.val_cfg.batch_size,
-            shuffle=self.val_cfg.shuffle,
-            num_workers=getattr(self.val_cfg, "num_workers", 0),
-        )
-        self.logger.info("Validation patches: %d", len(dataset))
-        return loader, dataset
-
-    def _build_criterion(self) -> nn.Module:
-        if not self.model_cfg.apply_weight_loss:
-            return nn.CrossEntropyLoss(ignore_index=self.model_cfg.ignore_index)
-
-        inverse, pixels = weights(
-            self.train_loader,
-            num_classes=self.model_cfg.num_classes,
-            ignore_index=self.model_cfg.ignore_index,
-            device=self.device,
-        )
-        if self.model_cfg.weight_type == "pixels":
-            return nn.CrossEntropyLoss(weight=pixels, ignore_index=self.model_cfg.ignore_index)
-        if self.model_cfg.weight_type == "inverse":
-            return nn.CrossEntropyLoss(weight=inverse, ignore_index=self.model_cfg.ignore_index)
-        raise ValueError(f"Invalid weight_type: {self.model_cfg.weight_type}")
-
-    def _build_training_components(
-        self,
-    ) -> tuple[TerraMindEncoder, UNet2D, optim.Optimizer, callable]:
-        encoder = TerraMindEncoder(
-            version=self.model_cfg.TM_version,
-            pretrained=self.model_cfg.pretrained,
-            modalities=list(self.model_cfg.modalities),
-        )
-        decoder = UNet2D(num_classes=self.model_cfg.num_classes)
-        encoder.to(self.device)
-        decoder.to(self.device)
-
-        if self.model_cfg.TM_finetune:
-            optimizer = optim.Adam(
-                list(encoder.parameters()) + list(decoder.parameters()),
-                lr=self.model_cfg.learning_rate,
-            )
-            encoder_mode = encoder.train
-            self.logger.info("Fine-tuning encoder + decoder")
-        else:
-            optimizer = optim.Adam(decoder.parameters(), lr=self.model_cfg.learning_rate)
-            encoder_mode = encoder.eval
-            self.logger.info("Training decoder only (encoder frozen)")
-
-        return encoder, decoder, optimizer, encoder_mode
 
     def _train_one_epoch(self, epoch: int) -> float:
         self.encoder_mode()
@@ -226,7 +136,7 @@ class Trainer:
                     train_loss.item(),
                 )
 
-        return running_train_loss / len(self.train_dataset)
+        return running_train_loss / len(self.train_loader.dataset)
 
     def _forward(self, inputs: dict) -> torch.Tensor:
         z_before = self.encoder(inputs["before"])

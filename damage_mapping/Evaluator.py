@@ -9,7 +9,6 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from damage_mapping.datasets.DataLoader import TestLoader
 from damage_mapping.models.Decoder_UNet2D import UNet2D
 from damage_mapping.models.Encoder_TerraMind import TerraMindEncoder
 from damage_mapping.models.utils import calc_test_metrics, move_to_device, tensor_to_color_image
@@ -30,37 +29,37 @@ class Evaluator:
         exp_dir: str | Path,
         ckpt_dir: str | Path,
         device: str | torch.device,
+        dataloader: DataLoader | None,
         logger: logging.Logger | None = None,
     ) -> None:
         self.cfg = cfg
         self.exp_dir = Path(exp_dir)
         self.ckpt_dir = Path(ckpt_dir)
         self.device = torch.device(device)
+        self.dataloader = dataloader
         self.logger = logger or logging.getLogger(__name__)
         self.writer = SummaryWriter(log_dir=str(self.exp_dir))
-        self.holdout_cfg = cfg.get("holdout_loader")
 
     def is_configured(self) -> bool:
-        return self.holdout_cfg is not None
+        return self.dataloader is not None
 
     def evaluate(self, checkpoint_path: str | Path | None = None) -> dict[int, dict[str, float]] | None:
         if not self.is_configured():
-            self.logger.info("Holdout evaluator skipped: no holdout_loader section found in config.")
+            self.logger.info("Holdout evaluator skipped: no holdout dataloader was provided.")
             self.writer.close()
             return None
 
-        dataloader = self._build_dataloader()
         checkpoint_path = Path(checkpoint_path) if checkpoint_path is not None else self._find_best_checkpoint()
         encoder, decoder = self._load_models(checkpoint_path)
 
         self.logger.info("Evaluator started")
-        self.logger.info("Holdout patches: %d", len(dataloader.dataset))
+        self.logger.info("Holdout patches: %d", len(self.dataloader.dataset))
         self.logger.info("Using checkpoint: %s", checkpoint_path)
 
-        tile_reconstruction, padding, metas = self._collect_patch_outputs(dataloader, encoder, decoder)
+        tile_reconstruction, padding, metas = self._collect_patch_outputs(self.dataloader, encoder, decoder)
         image_tiles_true, image_tiles_pred = self._reconstruct_tiles(
             tile_reconstruction,
-            patch_size=self.holdout_cfg.patch_size,
+            patch_size=self.dataloader.dataset.patch_size,
         )
         self._remove_padding(image_tiles_true, padding)
         self._remove_padding(image_tiles_pred, padding)
@@ -73,22 +72,6 @@ class Evaluator:
         self.logger.info("Saved holdout GeoTIFFs to %s", geotiff_dir)
         self.logger.info("Holdout evaluation completed")
         return metrics
-
-    def _build_dataloader(self) -> DataLoader:
-        holdout_modalities = {
-            name: (paths.before, paths.after) for name, paths in self.holdout_cfg.modalities.items()
-        }
-        dataset = TestLoader(
-            modalities=holdout_modalities,
-            label_dir=self.holdout_cfg.label_dir,
-            patch_size=self.holdout_cfg.patch_size,
-            stride=self.holdout_cfg.stride,
-        )
-        return DataLoader(
-            dataset,
-            batch_size=None,
-            num_workers=getattr(self.holdout_cfg, "num_workers", 0),
-        )
 
     def _find_best_checkpoint(self) -> Path:
         matches = sorted(self.ckpt_dir.glob("best_model_*.pt"))
