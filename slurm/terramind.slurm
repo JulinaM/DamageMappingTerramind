@@ -14,17 +14,17 @@
 set -Eeuo pipefail
 
 ## USAGE::
-# Minimal (default): sbatch --export=JOB_TYPE=train_large slurm/terramind.slurm
-# Debug infra logs: sbatch --export=JOB_TYPE=train,SLURM_LOG_LEVEL=debug slurm/terramind.slurm
+# Minimal (default): sbatch slurm/terramind.slurm
+# Debug infra logs: sbatch --export=DATA_SIZE=small_search,SLURM_LOG_LEVEL=debug slurm/terramind.slurm
 
-JOB_TYPE=${JOB_TYPE:-train_small} #train_small|train_large|train_debug
+DATA_SIZE=${DATA_SIZE:-large} #large|small|large_search|small_search|old
 SLURM_LOG_LEVEL="${SLURM_LOG_LEVEL:-minimal}"  # minimal|debug
 PROJ_DIR="/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2"
 LOG_DIR="${PROJ_DIR}/data/slurm_logs"
 
-case "${JOB_TYPE}" in
-  train_old) LOG_STEM="terramind-train-old" ;;
-  *) LOG_STEM="terramind-${JOB_TYPE//_/-}" ;;
+case "${DATA_SIZE}" in
+  old) LOG_STEM="Terramind-train-old" ;;
+  *) LOG_STEM="terramind-${DATA_SIZE//_/-}" ;;
 esac
 
 mkdir -p "${LOG_DIR}"
@@ -37,7 +37,7 @@ on_error() {
   local exit_code=$?
   >&2 echo "[SLURM $(timestamp)] ERROR: command failed (exit=${exit_code}) at line ${BASH_LINENO[0]}"
   >&2 echo "[SLURM $(timestamp)] ERROR: ${BASH_COMMAND}"
-  >&2 echo "[SLURM $(timestamp)] Job '${JOB_TYPE}' failed"
+  >&2 echo "[SLURM $(timestamp)] DATA_SIZE '${DATA_SIZE}' failed"
   exit "${exit_code}"
 }
 trap on_error ERR
@@ -49,7 +49,7 @@ module load cuda/12.4.1 miniconda3/24.1.2-py310
 source activate lora
 
 
-log ">> Job start | id=${SLURM_JOB_ID} type=${JOB_TYPE} host=$(hostname)"
+log ">> Job start | id=${SLURM_JOB_ID} type=${DATA_SIZE} host=$(hostname)"
 
 if [[ "${SLURM_LOG_LEVEL}" == "debug" ]]; then
   echo
@@ -61,26 +61,30 @@ fi
 # Better traceback formatting for Hydra exceptions.
 export HYDRA_FULL_ERROR=1
 
-case $JOB_TYPE in
-  train_large)
-    CMD=(
-      python3 -u -m damage_mapping
-      "job_type=${JOB_TYPE}"
-      "experiment_name=dev-run-large"
-      "model.modalities=[S2L2A]"
-      "~train_loader.modalities.S1GRD"
-      "~validation_loader.modalities.S1GRD"
-    )
-    ;;
-  train_small)
+case $DATA_SIZE in
+  large)
     CMD=(
       python3 -u -m damage_mapping 
-      "--config-name=terramind_small"
-      "experiment_name=dev-run-small"
+    )
+    ;;
+  small)
+    CMD=(
+      python3 -u -m damage_mapping "--config-name=terramind_small"
+    )
+    ;;
+  
+  large_search)
+    CMD=(
+      python3 -u -m damage_mapping "--config-name=terramind_large_search"
+    )
+    ;;
+  small_search)
+    CMD=(
+      python3 -u -m damage_mapping "--config-name=terramind_small_search"
     )
     ;;
 
-  train_old)
+  old)
     CMD=(
       python3 -u "${PROJ_DIR}/damage_mapping/trainer.py"
       "model.modalities=[S2L2A]"
@@ -91,7 +95,7 @@ case $JOB_TYPE in
     ;;
 
   *)
-    >&2 echo "ERROR: Invalid job type '${JOB_TYPE}'. Valid options: {train_large|train_small|train_debug|eval}"
+    >&2 echo "ERROR: Invalid job type '${DATA_SIZE}'. Valid options: {large|small|large_search|small_search|old_debug}"
     exit 2
     ;;
 esac
@@ -102,4 +106,4 @@ fi
 "${CMD[@]}"
 
 echo
-echo "====== Job id=${SLURM_JOB_ID}  '$JOB_TYPE' finished successfully. ======"
+echo "====== Job id=${SLURM_JOB_ID}  '$DATA_SIZE' finished successfully. ======"

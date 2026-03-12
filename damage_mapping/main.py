@@ -162,7 +162,7 @@ def main(cfg: DictConfig):
         logger=logger,
     )
 
-    trainer.train()
+    best_val_iou = trainer.train()
     evaluator.evaluate()
 
     if distributed:
@@ -170,6 +170,8 @@ def main(cfg: DictConfig):
 
     if cfg.use_wandb and rank == 0:
         wandb.finish()
+
+    return best_val_iou
 
 
 if __name__ == "__main__":

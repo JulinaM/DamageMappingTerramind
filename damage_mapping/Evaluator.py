@@ -180,7 +180,6 @@ class Evaluator:
                     "count": 1,
                     "dtype": "uint8",
                     "nodata": 0,
-                    "photometric": "palette",
                 }
             )
             output_path = geotiff_dir / f"predicted_map_{idx}_colored.tif"

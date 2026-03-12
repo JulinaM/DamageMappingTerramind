@@ -47,9 +47,12 @@ class Trainer:
 
         self.n_epochs = int(getattr(self.trainer_cfg, "n_epochs", self.model_cfg.num_epochs))
         self.best_val_loss = float("inf")
+        self.best_val_metrics: dict[str, float] | None = None
+        self.best_epoch: int | None = None
+        self._last_val_metrics: dict[str, float] | None = None
         self.encoder_mode = self.encoder.train if self.model_cfg.TM_finetune else self.encoder.eval
 
-    def train(self) -> None:
+    def train(self) -> float:
         self.logger.info("Trainer started")
         self.logger.info("Output directory: %s", self.exp_dir)
         self.logger.info("Device: %s", self.device)
@@ -66,6 +69,7 @@ class Trainer:
             for epoch in range(self.n_epochs):
                 train_loss = self._train_one_epoch(epoch)
                 val_loss, val_metrics = self.validate()
+                self._last_val_metrics = val_metrics
                 self._log_epoch(epoch, train_loss, val_loss, val_metrics)
                 self._save_best_checkpoint(epoch, val_loss)
                 self._write_tensorboard(epoch, train_loss, val_loss, val_metrics)
@@ -76,6 +80,10 @@ class Trainer:
         finally:
             self.writer.close()
             self.logger.info("Closed TensorBoard writer")
+
+        if self.best_val_metrics is None:
+            raise RuntimeError("Trainer completed without recording best validation metrics.")
+        return float(self.best_val_metrics["IoU"])
 
     def validate(self) -> tuple[float, dict[str, float]]:
         self.encoder.eval()
@@ -165,6 +173,8 @@ class Trainer:
             return
 
         self.best_val_loss = val_loss
+        self.best_epoch = epoch
+        self.best_val_metrics = getattr(self, "_last_val_metrics", None)
         save_checkpoint(
             self.encoder,
             self.decoder,

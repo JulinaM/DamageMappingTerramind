@@ -1,0 +1,18 @@
+defaults:
+  - terramind
+  - _self_
+
+experiment_name: dev-sweeps-large
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+    dir: /users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/experiments/${experiment_name}/${hydra.job.config_name}_${now:%Y-%m-%d}_${now:%H%M%S}
+    subdir: ${hydra.job.num}
+  sweeper:
+    params:
+      trainer.n_epochs: 8,12,16
+      model.learning_rate: 0.0005,0.0001
+      model.apply_weight_loss: true,false
+      model.weight_type: inverse,pixels
+      train_loader.num_augmentations: 2,4
