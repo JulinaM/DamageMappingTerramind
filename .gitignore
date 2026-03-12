@@ -4,3 +4,5 @@
 ./junk/*
 ./multirun/
 ./wandb
+./damage_mapping/datasets/__pycache__
+./damage_mapping/models/__pycache__
