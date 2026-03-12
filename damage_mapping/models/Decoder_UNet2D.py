@@ -24,7 +24,8 @@ class ConvBlock(nn.Module):
 class UpBlock(nn.Module):
     def __init__(self, in_channels: int, skip_channels: int, out_channels: int) -> None:
         super().__init__()
-        self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
+        #Why Transposed Convolution Can Cause Checkerboard Artifacts TODO #Upsample (bilinear)
+        self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2) #Why Transposed Convolution Can Cause Checkerboard Artifacts
         self.conv = ConvBlock(out_channels + skip_channels, out_channels)
 
     def forward(self, x: torch.Tensor, skip: torch.Tensor) -> torch.Tensor:
@@ -71,6 +72,7 @@ class UNet2D(nn.Module):
             [nn.Conv2d(token_dim, out_ch, kernel_size=1) for out_ch in self.decoder_channels]
         )
 
+        #To build Terramind as Feature Pyramid Network
         self.upsamplers = nn.ModuleList(
             [
                 nn.Identity()

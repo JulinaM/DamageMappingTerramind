@@ -6,7 +6,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
-#SBATCH --time=00:10:00
+#SBATCH --time=00:30:00
 #SBATCH --mem=16G
 #SBATCH --output=/dev/null
 #SBATCH --error=/dev/null
@@ -14,10 +14,10 @@
 set -Eeuo pipefail
 
 ## USAGE::
-# Minimal (default): sbatch --export=JOB_TYPE=train slurm/terramind.slurm
+# Minimal (default): sbatch --export=JOB_TYPE=train_large slurm/terramind.slurm
 # Debug infra logs: sbatch --export=JOB_TYPE=train,SLURM_LOG_LEVEL=debug slurm/terramind.slurm
 
-JOB_TYPE=${JOB_TYPE:-train_eval} #train|eval|train_eval|train_debug
+JOB_TYPE=${JOB_TYPE:-train_small} #train_small|train_large|train_debug
 SLURM_LOG_LEVEL="${SLURM_LOG_LEVEL:-minimal}"  # minimal|debug
 PROJ_DIR="/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2"
 LOG_DIR="${PROJ_DIR}/data/slurm_logs"
@@ -62,13 +62,21 @@ fi
 export HYDRA_FULL_ERROR=1
 
 case $JOB_TYPE in
-  train|eval|train_eval)
+  train_large)
     CMD=(
       python3 -u -m damage_mapping
       "job_type=${JOB_TYPE}"
+      "experiment_name=dev-run-large"
       "model.modalities=[S2L2A]"
       "~train_loader.modalities.S1GRD"
       "~validation_loader.modalities.S1GRD"
+    )
+    ;;
+  train_small)
+    CMD=(
+      python3 -u -m damage_mapping 
+      "--config-name=terramind_small"
+      "experiment_name=dev-run-small"
     )
     ;;
 
@@ -83,7 +91,7 @@ case $JOB_TYPE in
     ;;
 
   *)
-    >&2 echo "ERROR: Invalid job type '${JOB_TYPE}'. Valid options: {train|train_eval|train_debug|eval}"
+    >&2 echo "ERROR: Invalid job type '${JOB_TYPE}'. Valid options: {train_large|train_small|train_debug|eval}"
     exit 2
     ;;
 esac

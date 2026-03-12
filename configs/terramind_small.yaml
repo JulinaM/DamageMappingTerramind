@@ -7,13 +7,13 @@ job_type: train_eval
 train_loader: 
   modalities:
     S2L2A:
-      before: Images_large/Train/Before/S2L2A
-      after: Images_large/Train/After/S2L2A
+      before: Images_small/Before/S2L2A
+      after: Images_small/After/S2L2A
     S1GRD:
-      before: Images_large/Train/Before/S1GRD/DESC
-      after: Images_large/Train/After/S1GRD/DESC
-  label_dir: Images_large/Train/Labels
-  num_augmentations: 4
+      before: Images_small/Before/S1GRD/DESC
+      after: Images_small/After/S1GRD/DESC
+  label_dir: Images_small/Relabeled
+  num_augmentations: 2
   patch_size: 224
   stride: 224
   preload: False
@@ -24,17 +24,17 @@ train_loader:
 validation_loader: 
   modalities:
     S2L2A:
-      before: Images_large/Train/Before/S2L2A
-      after: Images_large/Train/After/S2L2A
+      before: Images_small/Before/S2L2A
+      after: Images_small/After/S2L2A
     S1GRD:
-      before: Images_large/Train/Before/S1GRD/DESC
-      after: Images_large/Train/After/S1GRD/DESC
-  label_dir: Images_large/Train/Labels
+      before: Images_small/Before/S1GRD/DESC
+      after: Images_small/After/S1GRD/DESC
+  label_dir: Images_small/Relabeled
   patch_size: 224
   stride: 224
   preload: False
   batch_size: 4
-  shuffle: False
+  shuffle: True
   num_workers: 2
 
 holdout_loader:
@@ -58,12 +58,12 @@ model:
   pretrained: True
   modalities: ["S2L2A", "S1GRD"]
   TM_finetune: False
-  learning_rate: 0.0001
-  num_epochs: 8
+  learning_rate: 0.0005
+  num_epochs: 2
   seed: 22
 
 trainer:
-  n_epochs: 8
+  n_epochs: 5
   log_interval: 1
   
 use_wandb: false

@@ -1,4 +1,4 @@
-experiment_name: "dev-runs"
+experiment_name: ??
 
 dry_run: False
 wandb:

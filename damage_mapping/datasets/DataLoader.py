@@ -1,5 +1,6 @@
 #patches + location tracking multimodal
 from torch.utils.data import Dataset
+import numpy as np
 import rasterio as rio
 from pathlib import Path
 import torch
@@ -15,6 +16,30 @@ from damage_mapping.models.utils import standardize, RandomFlipPair, RandomRotat
 
 INPUT_DIR = Path("/users/PGS0218/julina/projects/geography/damage_mapping_terramind/V2/data/input/")
 LOGGER = logging.getLogger(__name__)
+EXPECTED_MODALITY_BANDS = {
+    "S2L2A": ("B2", "B3", "B4", "B5", "B6", "B7", "B8", "B8A", "B9", "B11", "B12", "NDVI"),
+    "S1GRD": ("VV", "VH"),
+}
+
+
+def _compute_ndvi(arr, descriptions):
+    band_lookup = {name: idx for idx, name in enumerate(descriptions)}
+    if "B8" not in band_lookup or "B4" not in band_lookup:
+        raise ValueError(
+            "Cannot synthesize NDVI because required bands B8 and B4 are not both present. "
+            f"Available bands: {descriptions}"
+        )
+
+    nir = arr[band_lookup["B8"]].astype("float32")
+    red = arr[band_lookup["B4"]].astype("float32")
+    denominator = nir + red
+    ndvi = np.divide(
+        nir - red,
+        denominator,
+        out=np.zeros_like(nir, dtype=np.float32),
+        where=np.abs(denominator) > 1e-8,
+    )
+    return ndvi
 
 class Train_Val_Loader(Dataset):
     def __init__(
@@ -124,10 +149,15 @@ class Train_Val_Loader(Dataset):
 # # ------------------- Image loading & caching
     # Load in data and clean up NA values
     @lru_cache(maxsize=None)
-    def _load_tif(self, path):
+    def _load_tif(self, path, modality=None):
         with rio.open(path) as src:
             arr = src.read().astype('float32')
             nodata = src.nodata
+            descriptions = tuple(desc or f"band_{idx + 1}" for idx, desc in enumerate(src.descriptions))
+
+        if modality in EXPECTED_MODALITY_BANDS and descriptions:
+            arr = self._select_expected_bands(arr, descriptions, modality, path)
+
         arr = torch.from_numpy(arr)
         # Replace NaN or NoData values
         if nodata is not None:
@@ -135,6 +165,36 @@ class Train_Val_Loader(Dataset):
         # double check to replace any NAs after accounting for rio defined non-vals
         arr = torch.nan_to_num(arr, nan=0.0)
         return arr
+
+    def _select_expected_bands(self, arr, descriptions, modality, path):
+        expected_bands = EXPECTED_MODALITY_BANDS[modality]
+        descriptions = list(descriptions)
+        if tuple(descriptions) == expected_bands:
+            return arr
+
+        # TODO(team): Confirm whether small-set S2L2A should keep B1 instead of synthesizing NDVI.
+        # Current behavior aligns small files to the large-set TerraMind schema:
+        # B2,B3,B4,B5,B6,B7,B8,B8A,B9,B11,B12,NDVI.
+        if modality == "S2L2A" and "NDVI" not in descriptions:
+            descriptions.append("NDVI")
+            arr = np.concatenate((arr, _compute_ndvi(arr, tuple(descriptions[:-1]))[None, ...]), axis=0)
+
+        missing = [band for band in expected_bands if band not in descriptions]
+        if missing:
+            raise ValueError(
+                f"{path} is missing expected {modality} bands {missing}. "
+                f"Available bands: {descriptions}"
+            )
+
+        selected_indices = [descriptions.index(band) for band in expected_bands]
+        LOGGER.warning(
+            "Selecting %d/%d %s bands from %s to match expected TerraMind input order.",
+            len(selected_indices),
+            len(descriptions),
+            modality,
+            path,
+        )
+        return arr[selected_indices, ...]
 
     # Preload images to save run time
     def _preload_images(self):
@@ -144,8 +204,8 @@ class Train_Val_Loader(Dataset):
                 before_file = sorted((INPUT_DIR / before_dir).glob("*.tif"))[idx]
                 after_file = sorted((INPUT_DIR / after_dir).glob("*.tif"))[idx]
                 image_dict[name] = {
-                    "before": self._load_tif(before_file),
-                    "after": self._load_tif(after_file)
+                    "before": self._load_tif(before_file, name),
+                    "after": self._load_tif(after_file, name)
                 }
             label_file = self.label_files[idx]
             image_dict["label"] = self._load_tif(label_file).squeeze()
@@ -187,8 +247,8 @@ class Train_Val_Loader(Dataset):
                 before_file = sorted((INPUT_DIR / before_dir).glob("*.tif"))[i]
                 after_file = sorted((INPUT_DIR / after_dir).glob("*.tif"))[i]
                 data[name] = {
-                    "before": self._load_tif(before_file),
-                    "after": self._load_tif(after_file)
+                    "before": self._load_tif(before_file, name),
+                    "after": self._load_tif(after_file, name)
                 }
             label_file = self.label_files[i]
             data["label"] = self._load_tif(label_file).squeeze()
@@ -323,15 +383,50 @@ class TestLoader(Dataset):
 
     # clean up potential NAs
     @lru_cache(maxsize=None)
-    def _load_tif(self, path):
+    def _load_tif(self, path, modality=None):
         with rio.open(path) as src:
             arr = src.read().astype('float32')
             nodata = src.nodata
+            descriptions = tuple(desc or f"band_{idx + 1}" for idx, desc in enumerate(src.descriptions))
+
+        if modality in EXPECTED_MODALITY_BANDS and descriptions:
+            arr = self._select_expected_bands(arr, descriptions, modality, path)
+
         arr = torch.from_numpy(arr)
         if nodata is not None:
             arr[arr == nodata] = 0.0
         arr = torch.nan_to_num(arr, nan=0.0)
         return arr
+
+    def _select_expected_bands(self, arr, descriptions, modality, path):
+        expected_bands = EXPECTED_MODALITY_BANDS[modality]
+        descriptions = list(descriptions)
+        if tuple(descriptions) == expected_bands:
+            return arr
+
+        # TODO(team): Confirm whether small-set S2L2A should keep B1 instead of synthesizing NDVI.
+        # Current behavior aligns small files to the large-set TerraMind schema:
+        # B2,B3,B4,B5,B6,B7,B8,B8A,B9,B11,B12,NDVI.
+        if modality == "S2L2A" and "NDVI" not in descriptions:
+            descriptions.append("NDVI")
+            arr = np.concatenate((arr, _compute_ndvi(arr, tuple(descriptions[:-1]))[None, ...]), axis=0)
+
+        missing = [band for band in expected_bands if band not in descriptions]
+        if missing:
+            raise ValueError(
+                f"{path} is missing expected {modality} bands {missing}. "
+                f"Available bands: {descriptions}"
+            )
+
+        selected_indices = [descriptions.index(band) for band in expected_bands]
+        LOGGER.warning(
+            "Selecting %d/%d %s bands from %s to match expected TerraMind input order.",
+            len(selected_indices),
+            len(descriptions),
+            modality,
+            path,
+        )
+        return arr[selected_indices, ...]
     
     def _build_patch_index_map(self):
         index_map = []
@@ -368,8 +463,8 @@ class TestLoader(Dataset):
                     meta = src.meta.copy()
 
             data[name] = {
-                "before": self._load_tif(before_file),
-                "after": self._load_tif(after_file)}
+                "before": self._load_tif(before_file, name),
+                "after": self._load_tif(after_file, name)}
             
             
 

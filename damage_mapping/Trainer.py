@@ -56,6 +56,8 @@ class Trainer:
         self.logger.info("Model config: %s", OmegaConf.to_container(self.model_cfg, resolve=True))
         self.logger.info("Train loader config: %s", OmegaConf.to_container(self.train_cfg, resolve=True))
         self.logger.info("Validation loader config: %s", OmegaConf.to_container(self.val_cfg, resolve=True))
+        self.logger.info("Train patches: %d", len(self.train_loader.dataset))
+        self.logger.info("Validation patches: %d", len(self.val_loader.dataset))
         self.logger.info("Train batches: %d", len(self.train_loader))
         self.logger.info("Validation batches: %d", len(self.val_loader))
         self.logger.info("Starting training for %d epoch(s)", self.n_epochs)
