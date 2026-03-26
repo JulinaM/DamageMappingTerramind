@@ -62,6 +62,7 @@ fi
 export HYDRA_FULL_ERROR=1
 
 case $DATA_SIZE in
+
   large)
     CMD=(
       python3 -u -m damage_mapping 
@@ -86,7 +87,7 @@ case $DATA_SIZE in
 
   old)
     CMD=(
-      python3 -u "${PROJ_DIR}/damage_mapping/trainer.py"
+      python3 -u -m damage_mapping 
       "model.modalities=[S2L2A]"
       "~train_loader.modalities.S1GRD"
       "~validation_loader.modalities.S1GRD"
@@ -95,7 +96,7 @@ case $DATA_SIZE in
     ;;
 
   *)
-    >&2 echo "ERROR: Invalid job type '${DATA_SIZE}'. Valid options: {large|small|large_search|small_search|old_debug}"
+    >&2 echo "ERROR: Invalid job type '${DATA_SIZE}'. Valid options: {large|small|large_search|small_search|old}"
     exit 2
     ;;
 esac
@@ -103,6 +104,7 @@ esac
 if [[ "${SLURM_LOG_LEVEL}" == "debug" ]]; then
   log "cmd=${CMD[*]}"
 fi
+# srun --job-name="TM_${DATA_SIZE}" \
 "${CMD[@]}"
 
 echo

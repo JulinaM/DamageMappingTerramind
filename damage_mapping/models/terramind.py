@@ -111,6 +111,8 @@ class TerramindBayeSiamNet(TerraMindEncoder):
         inputs = x['S1GRD']
         _, _, t, _, _ = inputs.shape
         
+        #TODO: Understand
+        #Why default forward is not called? instead positional emb + token emb ??
         feat_before = self.forward_encoder({"S1GRD": inputs[:, : , :t//2].squeeze(2)})
         feat_after = self.forward_encoder({"S1GRD": inputs[:, : , t//2: ].squeeze(2)})
         b, l, d = feat_after[0].shape
@@ -125,7 +127,9 @@ class TerramindBayeSiamNet(TerraMindEncoder):
         for i in range(len(self.output_layers) - 1):
             if i == 0:
                 d = diffs[i]
-
+            #TODO Understand 
+            # A: Why transformer encoders often require learned projections instead of direct skip connections.
+            # B: Bayesian CNN?
             d_up = self.bayes_up_layers[i](d)
             d_pr = self.bayes_ij_layers[i](diffs[i+1])
             d = torch.cat([d_up, d_pr], dim=1)

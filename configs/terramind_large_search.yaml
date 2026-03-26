@@ -11,8 +11,10 @@ hydra:
     subdir: ${hydra.job.num}
   sweeper:
     params:
-      trainer.n_epochs: 8,12,16
+      trainer.n_epochs: 20
       model.learning_rate: 0.0005,0.0001
       model.apply_weight_loss: true,false
       model.weight_type: inverse,pixels
-      train_loader.num_augmentations: 2,4
+      model.num_classes: 3,4
+      train_loader.num_augmentations: 2,4,5
+      train_loader.batch_size: 4,8,20
