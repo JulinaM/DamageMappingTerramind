@@ -11,10 +11,18 @@ hydra:
     subdir: ${hydra.job.num}
   sweeper:
     params:
-      trainer.n_epochs: 20
-      model.learning_rate: 0.0005,0.0001
-      model.apply_weight_loss: true,false
-      model.weight_type: inverse,pixels
-      model.num_classes: 3,4
-      train_loader.num_augmentations: 2,4,5
-      train_loader.batch_size: 4,8,20
+      trainer.n_epochs: 8, 20
+      # model.learning_rate: 0.0005
+      # model.apply_weight_loss: true,false
+      # model.weight_type: inverse,pixels
+      # model.num_classes: 3
+      # train_loader.num_augmentations: 5
+      # train_loader.batch_size: 4
+      criterion.name: dice_focal, dice, ce
+      # criterion.apply_weight_loss: true
+      # criterion.weight_type: inverse
+      # criterion.dice_weight: 0.5
+      # criterion.focal_weight: 0.5
+      # criterion.focal_gamma: 2.0
+      # criterion.focal_alpha: null
+      # criterion.dice_smooth: 1e-6

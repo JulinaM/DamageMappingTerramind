@@ -3,9 +3,9 @@
 #SBATCH --job-name=Terramind
 #SBATCH --account=PGS0413
 #SBATCH --gpus-per-node=1
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=2
+#SBATCH --nodes=2
+#SBATCH --ntasks=2
+#SBATCH --cpus-per-task=8
 #SBATCH --time=00:30:00
 #SBATCH --mem=16G
 #SBATCH --output=/dev/null
@@ -62,7 +62,6 @@ fi
 export HYDRA_FULL_ERROR=1
 
 case $DATA_SIZE in
-
   large)
     CMD=(
       python3 -u -m damage_mapping 

@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from damage_mapping.models.Decoder_UNet2D import UNet2D
-from damage_mapping.models.Encoder_TerraMind import TerraMindEncoder
+from damage_mapping.models.encoders import build_encoder
 from damage_mapping.models.utils import calc_test_metrics, move_to_device, tensor_to_color_image
 
 
@@ -31,6 +31,7 @@ class Evaluator:
         device: str | torch.device,
         dataloader: DataLoader | None,
         logger: logging.Logger | None = None,
+        use_wandb: bool = False,
     ) -> None:
         self.cfg = cfg
         self.exp_dir = Path(exp_dir)
@@ -39,6 +40,11 @@ class Evaluator:
         self.dataloader = dataloader
         self.logger = logger or logging.getLogger(__name__)
         self.writer = SummaryWriter(log_dir=str(self.exp_dir))
+        self.use_wandb = use_wandb
+
+        if self.use_wandb:
+            import wandb
+            self.wandb = wandb
 
     def is_configured(self) -> bool:
         return self.dataloader is not None
@@ -79,14 +85,14 @@ class Evaluator:
             raise FileNotFoundError(f"No best checkpoint found in {self.ckpt_dir}")
         return matches[-1]
 
-    def _load_models(self, checkpoint_path: Path) -> tuple[TerraMindEncoder, UNet2D]:
+    def _load_models(self, checkpoint_path: Path):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
-        encoder = TerraMindEncoder(
-            version=self.cfg.model.TM_version,
-            pretrained=self.cfg.model.pretrained,
-            modalities=list(self.cfg.model.modalities),
+        encoder = build_encoder(self.cfg.encoder)
+        decoder = UNet2D(
+            num_classes=self.cfg.model.num_classes,
+            token_dim=int(getattr(self.cfg.encoder, "token_dim", 768)),
+            indices=list(getattr(self.cfg.encoder, "feature_indices", (3, 5, 7, 9, 11))),
         )
-        decoder = UNet2D(num_classes=self.cfg.model.num_classes)
         encoder.load_state_dict(checkpoint["encoder_state_dict"])
         decoder.load_state_dict(checkpoint["decoder_state_dict"])
         encoder.to(self.device).eval()
@@ -96,7 +102,7 @@ class Evaluator:
     def _collect_patch_outputs(
         self,
         dataloader: DataLoader,
-        encoder: TerraMindEncoder,
+        encoder,
         decoder: UNet2D,
     ) -> tuple[dict[int, list], dict[int, tuple[int, int, int, int]], dict[int, dict]]:
         padding = {}
@@ -215,7 +221,22 @@ class Evaluator:
             self.writer.add_image(f"holdout/comparison_{idx}", torch.cat((true_rgb, pred_rgb), dim=2))
 
         self.logger.info("Saved holdout metrics to %s", metrics_path)
+        self._write_wandb(metrics)
         return metrics
+
+    def _write_wandb(self, metrics: dict[int, dict[str, float]]) -> None:
+        if not self.use_wandb or not metrics:
+            return
+
+        metric_names = next(iter(metrics.values())).keys()
+        summary = {}
+        for name in metric_names:
+            values = [image_metrics[name] for image_metrics in metrics.values()]
+            summary[f"holdout/{name}_mean"] = float(np.mean(values))
+            summary[f"holdout/{name}_min"] = float(np.min(values))
+            summary[f"holdout/{name}_max"] = float(np.max(values))
+
+        self.wandb.summary.update(summary)
 
     @staticmethod
     def _to_int(value) -> int:

@@ -18,16 +18,19 @@ class TerraMindEncoder(nn.Module):
         version: str = "terramind_v1_base",
         pretrained: bool = True,
         modalities: Sequence[str] = ("S2L2A",),
+        **build_kwargs,
     ) -> None:
         super().__init__()
         self.version = version
         self.pretrained = pretrained
         self.modalities = tuple(modalities)
+        self.build_kwargs = dict(build_kwargs)
 
         self.model = BACKBONE_REGISTRY.build(
             version,
             pretrained=pretrained,
             modalities=list(self.modalities),
+            **self.build_kwargs,
         )
         self.has_lora_adapters = False
 

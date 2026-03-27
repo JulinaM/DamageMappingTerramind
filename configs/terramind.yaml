@@ -24,12 +24,12 @@ train_loader:
 validation_loader: 
   modalities:
     S2L2A:
-      before: Images_large/Train/Before/S2L2A
-      after: Images_large/Train/After/S2L2A
+      before: Images_large/Validation/Before/S2L2A
+      after: Images_large/Validation/After/S2L2A
     S1GRD:
-      before: Images_large/Train/Before/S1GRD/DESC
-      after: Images_large/Train/After/S1GRD/DESC
-  label_dir: Images_large/Train/Labels
+      before: Images_large/Validation/Before/S1GRD/DESC
+      after: Images_large/Validation/After/S1GRD/DESC
+  label_dir: Images_large/Validation/Labels
   patch_size: 224
   stride: 224
   preload: False
@@ -49,21 +49,35 @@ holdout_loader:
 
 model: 
   num_classes: 3
-  apply_weight_loss: False
-  weight_type: inverse
-  ignore_index : 0
   positive_class: 2
   negative_class: 1
-  TM_version: "terramind_v1_base"
-  pretrained: True
-  modalities: ["S2L2A", "S1GRD"]
+  ignore_index : 0
   TM_finetune: False
   learning_rate: 0.0005
   num_epochs: 8
   seed: 22
 
+encoder:
+  name: Terramind
+  version: terramind_v1_base
+  pretrained: true
+  modalities: ["S2L2A", "S1GRD"]
+  token_dim: 768
+  feature_indices: [3, 5, 7, 9, 11]
+  build_kwargs: {}
+
 trainer:
-  n_epochs: 20
+  n_epochs: 3
   log_interval: 1
   
-use_wandb: false
+use_wandb: True
+
+criterion:
+  name: ce #dice_focal, ce
+  apply_weight_loss: True
+  weight_type: inverse
+  dice_weight: 0.5
+  focal_weight: 0.5
+  focal_gamma: 2.0
+  focal_alpha: null
+  dice_smooth: 1e-6

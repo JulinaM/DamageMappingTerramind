@@ -3,8 +3,9 @@ experiment_name: ??
 dry_run: False
 wandb:
   project: damage-mapping
-  name: dm-dev
-  entity: julinam
+  name: null
+  entity: julinam-kent-state-university
+  mode: online
 
 hydra:
   # mode: run

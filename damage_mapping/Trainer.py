@@ -52,6 +52,10 @@ class Trainer:
         self._last_val_metrics: dict[str, float] | None = None
         self.encoder_mode = self.encoder.train if self.model_cfg.TM_finetune else self.encoder.eval
 
+        if self.use_wandb:
+            import wandb
+            self.wandb = wandb
+
     def train(self) -> float:
         self.logger.info("Trainer started")
         self.logger.info("Output directory: %s", self.exp_dir)
@@ -59,6 +63,7 @@ class Trainer:
         self.logger.info("Model config: %s", OmegaConf.to_container(self.model_cfg, resolve=True))
         self.logger.info("Train loader config: %s", OmegaConf.to_container(self.train_cfg, resolve=True))
         self.logger.info("Validation loader config: %s", OmegaConf.to_container(self.val_cfg, resolve=True))
+        self.logger.info("Criterion config: %s", OmegaConf.to_container(self.cfg.criterion, resolve=True))
         self.logger.info("Train patches: %d", len(self.train_loader.dataset))
         self.logger.info("Validation patches: %d", len(self.val_loader.dataset))
         self.logger.info("Train batches: %d", len(self.train_loader))
@@ -73,6 +78,7 @@ class Trainer:
                 self._log_epoch(epoch, train_loss, val_loss, val_metrics)
                 self._save_best_checkpoint(epoch, val_loss)
                 self._write_tensorboard(epoch, train_loss, val_loss, val_metrics)
+                self._write_wandb(epoch, train_loss, val_loss, val_metrics)
             self.logger.info("Training completed successfully")
         except Exception:
             self.logger.exception("Trainer failed")
@@ -122,6 +128,7 @@ class Trainer:
         self.encoder_mode()
         self.decoder.train()
         running_train_loss = 0.0
+        num_batches = len(self.train_loader)
 
         for batch_idx, (inputs, target) in enumerate(self.train_loader, start=1):
             inputs = move_to_device(inputs, self.device)
@@ -145,6 +152,18 @@ class Trainer:
                     len(self.train_loader),
                     train_loss.item(),
                 )
+
+            if self.use_wandb:
+                global_step = epoch * num_batches + batch_idx
+                self.wandb.log(
+                    {
+                        "train/global_step": global_step,
+                        "train/batch_loss": train_loss.item(),
+                        "train/learning_rate": self.optimizer.param_groups[0]["lr"],
+                        "train/epoch": epoch + 1,
+                    },
+                )
+
 
         return running_train_loss / len(self.train_loader.dataset)
 
@@ -200,3 +219,33 @@ class Trainer:
         self.writer.add_scalar("Metrics/Precision", metrics["Precision"], epoch)
         self.writer.add_scalar("Metrics/Recall", metrics["Recall"], epoch)
         self.writer.add_scalar("Metrics/F1", metrics["F1"], epoch)
+
+    def _write_wandb(
+        self,
+        epoch: int,
+        train_loss: float,
+        val_loss: float,
+        metrics: dict[str, float],
+    ) -> None:
+        if not self.use_wandb:
+            return
+
+        payload = {
+            "val/epoch": epoch + 1,
+            "train/epoch_loss": train_loss,
+            "val/loss": val_loss,
+            "val/IoU": metrics["IoU"],
+            "val/Accuracy": metrics["Accuracy"],
+            "val/Precision": metrics["Precision"],
+            "val/Recall": metrics["Recall"],
+            "val/F1": metrics["F1"],
+            "best/val_loss": self.best_val_loss,
+        }
+        if self.best_val_metrics is not None:
+            payload["best/IoU"] = self.best_val_metrics["IoU"]
+            payload["best/Accuracy"] = self.best_val_metrics["Accuracy"]
+            payload["best/Precision"] = self.best_val_metrics["Precision"]
+            payload["best/Recall"] = self.best_val_metrics["Recall"]
+            payload["best/F1"] = self.best_val_metrics["F1"]
+
+        self.wandb.log(payload)
