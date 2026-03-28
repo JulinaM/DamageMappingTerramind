@@ -37,6 +37,14 @@ class TerraMindEncoder(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+    @property
+    def decoder_spec(self) -> dict[str, object]:
+        return {
+            "input_adapter": "tokens",
+            "token_dim": int(getattr(self, "token_dim", 768)),
+            "feature_indices": list(getattr(self, "feature_indices", (3, 5, 7, 9, 11))),
+        }
+
     def inject_lora_adapters(
         self,
         *,

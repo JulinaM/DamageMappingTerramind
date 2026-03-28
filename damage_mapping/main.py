@@ -6,16 +6,16 @@ import hydra
 import torch
 import torch.optim as optim
 from hydra.core.hydra_config import HydraConfig
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 from torch.utils.data import DataLoader
 
 from damage_mapping.Evaluator import Evaluator
 from damage_mapping.Trainer import Trainer
 from damage_mapping.datasets.DataLoader import TestLoader, Train_Val_Loader
 from damage_mapping.logger import init_logger
-from damage_mapping.models.Decoder_UNet2D import UNet2D
+from damage_mapping.models.decoders import build_decoder
 from damage_mapping.models.encoders import build_encoder
-from damage_mapping.models.losses import build_criterion
+from damage_mapping.utils.losses import build_criterion
 from damage_mapping.models.utils import set_seeds
 
 REPO_DIR = pathlib.Path(__file__).parent.parent
@@ -26,6 +26,12 @@ CONFIG_DIR = REPO_DIR / "configs/"
 
 def init_wandb_run(cfg: DictConfig, exp_dir: Path, exp_name: str):
     import wandb
+
+    # Hydra multirun can execute multiple jobs in a single local process.
+    # Close any previous active run so each sweep member gets its own W&B run.
+    if wandb.run is not None:
+        wandb.finish()
+
     wandb_cfg = OmegaConf.to_container(cfg, resolve=True)
     wandb_settings = {
         "project": cfg.wandb.project,
@@ -33,6 +39,7 @@ def init_wandb_run(cfg: DictConfig, exp_dir: Path, exp_name: str):
         "config": wandb_cfg,
         "name": cfg.wandb.name or exp_name,
         "mode": getattr(cfg.wandb, "mode", "online"),
+        "reinit": True,
     }
 
     run = wandb.init(**wandb_settings)
@@ -91,12 +98,16 @@ def build_model_components(cfg: DictConfig, device: torch.device, train_loader: 
         device=device,
     )
 
+    if str(getattr(cfg.encoder, "name", "Terramind")).strip().lower() == "unet":
+        single_input = next(iter(train_loader))[0]
+        modality_channels = {name: int(value.shape[1]) for name, value in single_input['before'].items()}
+        print('modality_channels: ', modality_channels)
+        with open_dict(cfg.encoder):
+            cfg.encoder.build_kwargs = dict(getattr(cfg.encoder, "build_kwargs", {}) or {})
+            cfg.encoder.build_kwargs["modality_channels"] = modality_channels
+
     encoder = build_encoder(cfg.encoder)
-    decoder = UNet2D(
-        num_classes=cfg.model.num_classes,
-        token_dim=int(getattr(cfg.encoder, "token_dim", 768)),
-        indices=list(getattr(cfg.encoder, "feature_indices", (3, 5, 7, 9, 11))),
-    )
+    decoder = build_decoder(cfg.decoder, encoder, num_classes=cfg.model.num_classes)
     encoder.to(device)
     decoder.to(device)
 

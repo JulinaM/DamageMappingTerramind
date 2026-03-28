@@ -57,20 +57,40 @@ model:
   num_epochs: 8
   seed: 22
 
+# encoder:
+#   name: Terramind
+#   version: terramind_v1_base
+#   pretrained: true
+#   modalities: ["S2L2A", "S1GRD"]
+#   token_dim: 768
+#   feature_indices: [3, 5, 7, 9, 11]
+#   build_kwargs: {}
+
 encoder:
-  name: Terramind
-  version: terramind_v1_base
-  pretrained: true
+  name: UNet
   modalities: ["S2L2A", "S1GRD"]
-  token_dim: 768
-  feature_indices: [3, 5, 7, 9, 11]
-  build_kwargs: {}
+  build_kwargs:
+    channels: [64, 128, 256, 512, 1024]
+
+# encoder:
+#   name: Prithvi
+#   version: prithvi_eo_v2_tiny_tl
+#   pretrained: true
+#   modalities: ["S2L2A", "S1GRD"]
+#   token_dim: 768
+#   feature_indices: [3, 5, 7, 9, 11]
+#   build_kwargs:
+#     model_bands: ["BLUE", "GREEN", "RED", "NIR_NARROW", "SWIR_1", "SWIR_2", "VV", "VH"]
+
+decoder:
+  name: UNet
+  channels: [64, 128, 256, 512, 1024]
 
 trainer:
   n_epochs: 3
   log_interval: 1
   
-use_wandb: True
+use_wandb: False
 
 criterion:
   name: ce #dice_focal, ce

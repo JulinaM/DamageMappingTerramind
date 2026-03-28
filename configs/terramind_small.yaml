@@ -48,22 +48,47 @@ holdout_loader:
   num_workers: 2
 
 model: 
-  num_classes: 4
-  apply_weight_loss: False
-  weight_type: inverse
-  ignore_index : 0
+  num_classes: 3
   positive_class: 2
   negative_class: 1
-  TM_version: "terramind_v1_base"
-  pretrained: True
-  modalities: ["S2L2A", "S1GRD"]
+  ignore_index : 0
   TM_finetune: False
   learning_rate: 0.0005
-  num_epochs: 2
+  num_epochs: 8
   seed: 22
 
+encoder:
+  name: Terramind
+  version: terramind_v1_base
+  pretrained: true
+  modalities: ["S2L2A", "S1GRD"]
+  token_dim: 768
+  feature_indices: [3, 5, 7, 9, 11]
+  build_kwargs: {}
+
+# encoder:
+#   name: UNet
+#   modalities: ["S2L2A", "S1GRD"]
+#   build_kwargs:
+#     channels: [64, 128, 256, 512, 1024]
+
+
+decoder:
+  name: UNet
+  channels: [64, 128, 256, 512, 1024]
+
 trainer:
-  n_epochs: 5
+  n_epochs: 3
   log_interval: 1
   
-use_wandb: false
+use_wandb: False
+
+criterion:
+  name: ce #dice_focal, ce
+  apply_weight_loss: True
+  weight_type: inverse
+  dice_weight: 0.5
+  focal_weight: 0.5
+  focal_gamma: 2.0
+  focal_alpha: null
+  dice_smooth: 1e-6

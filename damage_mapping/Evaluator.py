@@ -9,7 +9,7 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from damage_mapping.models.Decoder_UNet2D import UNet2D
+from damage_mapping.models.decoders import build_decoder
 from damage_mapping.models.encoders import build_encoder
 from damage_mapping.models.utils import calc_test_metrics, move_to_device, tensor_to_color_image
 
@@ -88,11 +88,7 @@ class Evaluator:
     def _load_models(self, checkpoint_path: Path):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         encoder = build_encoder(self.cfg.encoder)
-        decoder = UNet2D(
-            num_classes=self.cfg.model.num_classes,
-            token_dim=int(getattr(self.cfg.encoder, "token_dim", 768)),
-            indices=list(getattr(self.cfg.encoder, "feature_indices", (3, 5, 7, 9, 11))),
-        )
+        decoder = build_decoder(self.cfg.decoder, encoder, num_classes=self.cfg.model.num_classes)
         encoder.load_state_dict(checkpoint["encoder_state_dict"])
         decoder.load_state_dict(checkpoint["decoder_state_dict"])
         encoder.to(self.device).eval()
@@ -103,7 +99,7 @@ class Evaluator:
         self,
         dataloader: DataLoader,
         encoder,
-        decoder: UNet2D,
+        decoder,
     ) -> tuple[dict[int, list], dict[int, tuple[int, int, int, int]], dict[int, dict]]:
         padding = {}
         metas = {}
