@@ -52,7 +52,6 @@ model:
   positive_class: 2
   negative_class: 1
   ignore_index : 0
-  TM_finetune: False
   learning_rate: 0.0005
   num_epochs: 8
   seed: 22
@@ -61,6 +60,7 @@ encoder:
   name: Terramind
   version: terramind_v1_base
   pretrained: true
+  finetune: false
   modalities: ["S2L2A", "S1GRD"]
   token_dim: 768
   feature_indices: [3, 5, 7, 9, 11]

@@ -41,6 +41,7 @@ class Trainer:
         self.writer = SummaryWriter(log_dir=str(self.exp_dir))
 
         self.model_cfg = cfg.model
+        self.encoder_cfg = cfg.encoder
         self.train_cfg = cfg.train_loader
         self.val_cfg = cfg.validation_loader
         self.trainer_cfg = cfg.trainer
@@ -50,7 +51,8 @@ class Trainer:
         self.best_val_metrics: dict[str, float] | None = None
         self.best_epoch: int | None = None
         self._last_val_metrics: dict[str, float] | None = None
-        self.encoder_mode = self.encoder.train if self.model_cfg.TM_finetune else self.encoder.eval
+        encoder_name = str(getattr(self.encoder_cfg, "name", "Terramind")).strip().lower()
+        self.encoder_mode = self.encoder.train if (encoder_name == "unet" or bool(getattr(self.encoder_cfg, "finetune", False))) else self.encoder.eval
 
         if self.use_wandb:
             import wandb

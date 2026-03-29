@@ -28,12 +28,14 @@ class PrithviEncoder(nn.Module):
         self,
         version: str,
         pretrained: bool = True,
+        finetune: bool = False,
         modalities: Sequence[str] = ("S2L2A",),
         **build_kwargs,
     ) -> None:
         super().__init__()
         self.version = version
         self.pretrained = pretrained
+        self.finetune = finetune
         self.modalities = tuple(modalities)
         self.build_kwargs = dict(build_kwargs)
         self.model_bands = self._resolve_model_bands()
@@ -44,6 +46,11 @@ class PrithviEncoder(nn.Module):
             bands=list(self.model_bands),
             **self.build_kwargs,
         )
+
+        if not self.finetune:
+            for param in self.model.parameters():
+                param.requires_grad = False
+
 
     def forward(self, x):
         if isinstance(x, Mapping):

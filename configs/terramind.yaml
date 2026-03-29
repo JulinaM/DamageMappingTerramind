@@ -2,7 +2,7 @@ defaults:
   - base
   - _self_
 
-experiment_name: dev-run-large
+experiment_name: Unet_Encoder
 
 train_loader: 
   modalities:
@@ -52,7 +52,6 @@ model:
   positive_class: 2
   negative_class: 1
   ignore_index : 0
-  TM_finetune: False
   learning_rate: 0.0005
   num_epochs: 8
   seed: 22
@@ -61,6 +60,7 @@ model:
 #   name: Terramind
 #   version: terramind_v1_base
 #   pretrained: true
+#   finetune: false
 #   modalities: ["S2L2A", "S1GRD"]
 #   token_dim: 768
 #   feature_indices: [3, 5, 7, 9, 11]
@@ -76,6 +76,7 @@ encoder:
 #   name: Prithvi
 #   version: prithvi_eo_v2_tiny_tl
 #   pretrained: true
+#   finetune: false
 #   modalities: ["S2L2A", "S1GRD"]
 #   token_dim: 768
 #   feature_indices: [3, 5, 7, 9, 11]

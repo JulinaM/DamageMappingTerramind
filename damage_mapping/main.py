@@ -111,7 +111,8 @@ def build_model_components(cfg: DictConfig, device: torch.device, train_loader: 
     encoder.to(device)
     decoder.to(device)
 
-    if cfg.model.TM_finetune:
+    encoder_name = str(getattr(cfg.encoder, "name", "Terramind")).strip().lower()
+    if encoder_name == "unet" or bool(getattr(cfg.encoder, "finetune", False)):
         optimizer = optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=cfg.model.learning_rate)
     else:
         optimizer = optim.Adam(decoder.parameters(), lr=cfg.model.learning_rate)
@@ -155,6 +156,17 @@ def main(cfg: DictConfig):
     val_loader = build_loader(cfg.validation_loader, "validation")
     holdout_loader = build_holdout_loader(cfg)
     encoder, decoder, criterion, optimizer = build_model_components(cfg, device, train_loader)
+
+    encoder_total = sum(p.numel() for p in encoder.parameters())
+    encoder_trainable = sum(p.numel() for p in encoder.parameters() if p.requires_grad)
+    decoder_total = sum(p.numel() for p in decoder.parameters())
+    decoder_trainable= sum(p.numel() for p in decoder.parameters() if p.requires_grad)
+    
+    logger.info("Built {}.".format(encoder.__class__.__module__))
+    logger.info("Encoder params: total=%d | trainable=%d", encoder_total, encoder_trainable)
+    logger.info("Built {}.".format(decoder.__class__.__module__))
+    logger.info("Decoder params: total=%d | trainable=%d", decoder_total, decoder_trainable)
+
     trainer = Trainer(
         cfg=cfg,
         exp_dir=exp_dir,

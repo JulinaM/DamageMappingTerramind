@@ -13,6 +13,7 @@ def build_encoder(encoder_cfg) -> nn.Module:
         encoder = TerraMindEncoder(
             version=encoder_cfg.version,
             pretrained=bool(getattr(encoder_cfg, "pretrained", True)),
+            finetune=bool(getattr(encoder_cfg, "finetune", False)),
             modalities=list(encoder_cfg.modalities),
             **build_kwargs,
         )
@@ -24,16 +25,11 @@ def build_encoder(encoder_cfg) -> nn.Module:
         encoder = PrithviEncoder(
             version=encoder_cfg.version,
             pretrained=bool(getattr(encoder_cfg, "pretrained", True)),
+            finetune=bool(getattr(encoder_cfg, "finetune", False)),
             modalities=list(encoder_cfg.modalities),
             **build_kwargs,
         )
-        encoder.token_dim = int(
-            getattr(
-                encoder.model,
-                "embed_dim",
-                getattr(encoder_cfg, "token_dim", 768),
-            )
-        )
+        encoder.token_dim = int(getattr(encoder.model, "embed_dim", getattr(encoder_cfg, "token_dim", 768),))
         encoder.feature_indices = list(getattr(encoder_cfg, "feature_indices", (3, 5, 7, 9, 11)))
         return encoder
 
