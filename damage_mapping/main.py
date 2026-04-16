@@ -13,6 +13,7 @@ from damage_mapping.Evaluator import Evaluator
 from damage_mapping.Trainer import Trainer
 from damage_mapping.datasets.DataLoader import TestLoader, Train_Val_Loader
 from damage_mapping.logger import init_logger
+from damage_mapping.models.change_fusion import build_change_fusion
 from damage_mapping.models.decoders import build_decoder
 from damage_mapping.models.encoders import build_encoder
 from damage_mapping.utils.losses import build_criterion
@@ -75,7 +76,9 @@ def build_holdout_loader(cfg: DictConfig) -> DataLoader | None:
     if holdout_cfg is None:
         return None
 
+    print("-->", holdout_cfg)
     modalities = {name: (paths.before, paths.after) for name, paths in holdout_cfg.modalities.items()}
+    print(modalities)
     dataset = TestLoader(
         modalities=modalities,
         label_dir=holdout_cfg.label_dir,
@@ -107,17 +110,20 @@ def build_model_components(cfg: DictConfig, device: torch.device, train_loader: 
             cfg.encoder.build_kwargs["modality_channels"] = modality_channels
 
     encoder = build_encoder(cfg.encoder)
-    decoder = build_decoder(cfg.decoder, encoder, num_classes=cfg.model.num_classes)
+    change_fusion = build_change_fusion(cfg.change, encoder)
+    decoder = build_decoder(cfg.decoder, change_fusion, num_classes=cfg.model.num_classes)
     encoder.to(device)
+    change_fusion.to(device)
     decoder.to(device)
 
     encoder_name = str(getattr(cfg.encoder, "name", "Terramind")).strip().lower()
+    optimized_params = list(change_fusion.parameters()) + list(decoder.parameters())
     if encoder_name == "unet" or bool(getattr(cfg.encoder, "finetune", False)):
-        optimizer = optim.Adam(list(encoder.parameters()) + list(decoder.parameters()), lr=cfg.model.learning_rate)
+        optimizer = optim.Adam(list(encoder.parameters()) + optimized_params, lr=cfg.model.learning_rate)
     else:
-        optimizer = optim.Adam(decoder.parameters(), lr=cfg.model.learning_rate)
+        optimizer = optim.Adam(optimized_params, lr=cfg.model.learning_rate)
 
-    return encoder, decoder, criterion, optimizer
+    return encoder, change_fusion, decoder, criterion, optimizer
 
 
 @hydra.main(version_base="1.2", config_path=str(CONFIG_DIR), config_name="terramind")
@@ -155,15 +161,19 @@ def main(cfg: DictConfig):
     train_loader = build_loader(cfg.train_loader, "train")
     val_loader = build_loader(cfg.validation_loader, "validation")
     holdout_loader = build_holdout_loader(cfg)
-    encoder, decoder, criterion, optimizer = build_model_components(cfg, device, train_loader)
+    encoder, change_fusion, decoder, criterion, optimizer = build_model_components(cfg, device, train_loader)
 
     encoder_total = sum(p.numel() for p in encoder.parameters())
     encoder_trainable = sum(p.numel() for p in encoder.parameters() if p.requires_grad)
+    change_total = sum(p.numel() for p in change_fusion.parameters())
+    change_trainable = sum(p.numel() for p in change_fusion.parameters() if p.requires_grad)
     decoder_total = sum(p.numel() for p in decoder.parameters())
     decoder_trainable= sum(p.numel() for p in decoder.parameters() if p.requires_grad)
     
     logger.info("Built {}.".format(encoder.__class__.__module__))
     logger.info("Encoder params: total=%d | trainable=%d", encoder_total, encoder_trainable)
+    logger.info("Built {}.".format(change_fusion.__class__.__module__))
+    logger.info("Change fusion params: total=%d | trainable=%d", change_total, change_trainable)
     logger.info("Built {}.".format(decoder.__class__.__module__))
     logger.info("Decoder params: total=%d | trainable=%d", decoder_total, decoder_trainable)
 
@@ -175,6 +185,7 @@ def main(cfg: DictConfig):
         train_loader=train_loader,
         val_loader=val_loader,
         encoder=encoder,
+        change_fusion=change_fusion,
         decoder=decoder,
         criterion=criterion,
         optimizer=optimizer,

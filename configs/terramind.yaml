@@ -2,7 +2,7 @@ defaults:
   - base
   - _self_
 
-experiment_name: Unet_Encoder
+experiment_name: Prithvi_Encoder
 
 train_loader: 
   modalities:
@@ -102,3 +102,8 @@ criterion:
   focal_gamma: 2.0
   focal_alpha: null
   dice_smooth: 1e-6
+
+
+change:
+  method: concatenate_all_three # concatenate_all_three, siamese_fusion, attention_based_cross_time_fusion, signed_difference_plus_absolute_difference
+  attention_heads: 4

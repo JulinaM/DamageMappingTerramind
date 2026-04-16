@@ -164,7 +164,7 @@ def fix_seed(seed):
 
 
 
-def save_checkpoint(encoder, decoder, optimizer, epoch, val_loss, cfg, save_dir="checkpoints"):
+def save_checkpoint(encoder, change_fusion, decoder, optimizer, epoch, val_loss, cfg, save_dir="checkpoints"):
     """
     Save model checkpoint and config while deleting existing configs/models.
     In practice, will only will be activated when current loss < existing best loss
@@ -187,6 +187,7 @@ def save_checkpoint(encoder, decoder, optimizer, epoch, val_loss, cfg, save_dir=
     torch.save({
         'epoch': epoch,
         'encoder_state_dict': encoder.state_dict(),
+        'change_fusion_state_dict': change_fusion.state_dict(),
         'decoder_state_dict': decoder.state_dict(),
         'optimizer_state_dict': optimizer.state_dict() if optimizer is not None else None,
         'val_loss': val_loss,

@@ -9,6 +9,7 @@ from omegaconf import DictConfig
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
+from damage_mapping.models.change_fusion import build_change_fusion
 from damage_mapping.models.decoders import build_decoder
 from damage_mapping.models.encoders import build_encoder
 from damage_mapping.models.utils import calc_test_metrics, move_to_device, tensor_to_color_image
@@ -56,13 +57,13 @@ class Evaluator:
             return None
 
         checkpoint_path = Path(checkpoint_path) if checkpoint_path is not None else self._find_best_checkpoint()
-        encoder, decoder = self._load_models(checkpoint_path)
+        encoder, change_fusion, decoder = self._load_models(checkpoint_path)
 
         self.logger.info("Evaluator started")
         self.logger.info("Holdout patches: %d", len(self.dataloader.dataset))
         self.logger.info("Using checkpoint: %s", checkpoint_path)
 
-        tile_reconstruction, padding, metas = self._collect_patch_outputs(self.dataloader, encoder, decoder)
+        tile_reconstruction, padding, metas = self._collect_patch_outputs(self.dataloader, encoder, change_fusion, decoder)
         image_tiles_true, image_tiles_pred = self._reconstruct_tiles(
             tile_reconstruction,
             patch_size=self.dataloader.dataset.patch_size,
@@ -88,17 +89,22 @@ class Evaluator:
     def _load_models(self, checkpoint_path: Path):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
         encoder = build_encoder(self.cfg.encoder)
-        decoder = build_decoder(self.cfg.decoder, encoder, num_classes=self.cfg.model.num_classes)
+        change_fusion = build_change_fusion(self.cfg.change, encoder)
+        decoder = build_decoder(self.cfg.decoder, change_fusion, num_classes=self.cfg.model.num_classes)
         encoder.load_state_dict(checkpoint["encoder_state_dict"])
+        if "change_fusion_state_dict" in checkpoint:
+            change_fusion.load_state_dict(checkpoint["change_fusion_state_dict"])
         decoder.load_state_dict(checkpoint["decoder_state_dict"])
         encoder.to(self.device).eval()
+        change_fusion.to(self.device).eval()
         decoder.to(self.device).eval()
-        return encoder, decoder
+        return encoder, change_fusion, decoder
 
     def _collect_patch_outputs(
         self,
         dataloader: DataLoader,
         encoder,
+        change_fusion,
         decoder,
     ) -> tuple[dict[int, list], dict[int, tuple[int, int, int, int]], dict[int, dict]]:
         padding = {}
@@ -110,8 +116,8 @@ class Evaluator:
                 inputs = move_to_device(inputs, self.device)
                 z_before = encoder(inputs["before"])
                 z_after = encoder(inputs["after"])
-                z_differenced = [after - before for before, after in zip(z_before, z_after)]
-                logits = decoder(z_differenced)
+                fused_features = change_fusion(z_before, z_after)
+                logits = decoder(fused_features)
                 prediction = torch.argmax(logits, dim=1).cpu()
 
                 idx = self._to_int(idx)

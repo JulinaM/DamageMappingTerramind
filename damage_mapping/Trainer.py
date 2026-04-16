@@ -20,6 +20,7 @@ class Trainer:
         train_loader: DataLoader,
         val_loader: DataLoader,
         encoder: nn.Module,
+        change_fusion: nn.Module,
         decoder: nn.Module,
         criterion: nn.Module,
         optimizer,
@@ -33,6 +34,7 @@ class Trainer:
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.encoder = encoder
+        self.change_fusion = change_fusion
         self.decoder = decoder
         self.criterion = criterion
         self.optimizer = optimizer
@@ -95,6 +97,7 @@ class Trainer:
 
     def validate(self) -> tuple[float, dict[str, float]]:
         self.encoder.eval()
+        self.change_fusion.eval()
         self.decoder.eval()
 
         running_val_loss = 0.0
@@ -128,6 +131,7 @@ class Trainer:
 
     def _train_one_epoch(self, epoch: int) -> float:
         self.encoder_mode()
+        self.change_fusion.train()
         self.decoder.train()
         running_train_loss = 0.0
         num_batches = len(self.train_loader)
@@ -172,8 +176,8 @@ class Trainer:
     def _forward(self, inputs: dict) -> torch.Tensor:
         z_before = self.encoder(inputs["before"])
         z_after = self.encoder(inputs["after"])
-        z_differenced = [after - before for before, after in zip(z_before, z_after)]
-        return self.decoder(z_differenced)
+        fused_features = self.change_fusion(z_before, z_after)
+        return self.decoder(fused_features)
 
     def _log_epoch(self, epoch: int, train_loss: float, val_loss: float, metrics: dict[str, float]) -> None:
         self.logger.info(
@@ -198,6 +202,7 @@ class Trainer:
         self.best_val_metrics = getattr(self, "_last_val_metrics", None)
         save_checkpoint(
             self.encoder,
+            self.change_fusion,
             self.decoder,
             self.optimizer,
             epoch,
