@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 
 from damage_mapping.Evaluator import Evaluator
 from damage_mapping.Trainer import Trainer
+from damage_mapping.datasets.CurriculumDataManager import CurriculumDataManager
 from damage_mapping.datasets.DataLoader import TestLoader, Train_Val_Loader
 from damage_mapping.logger import init_logger
 from damage_mapping.models.change_fusion import build_change_fusion
@@ -45,10 +46,16 @@ def init_wandb_run(cfg: DictConfig, exp_dir: Path, exp_name: str):
 
     run = wandb.init(**wandb_settings)
     wandb.define_metric("train/global_step")
-    wandb.define_metric("train/*", step_metric="train/global_step")
+    wandb.define_metric("train/*",          step_metric="train/global_step")
+    wandb.define_metric("train/flood/*",    step_metric="train/global_step")
+    wandb.define_metric("train/conflict/*", step_metric="train/global_step")
     wandb.define_metric("val/epoch")
-    wandb.define_metric("val/*", step_metric="val/epoch")
-    wandb.define_metric("best/*", step_metric="val/epoch")
+    wandb.define_metric("val/*",            step_metric="val/epoch")
+    wandb.define_metric("val/flood/*",      step_metric="val/epoch")
+    wandb.define_metric("val/conflict/*",   step_metric="val/epoch")
+    wandb.define_metric("best/*",           step_metric="val/epoch")
+    wandb.define_metric("best/flood/*",     step_metric="val/epoch")
+    wandb.define_metric("best/conflict/*",  step_metric="val/epoch")
     return run
 
 
@@ -158,8 +165,25 @@ def main(cfg: DictConfig):
     logger.info("Device name: %s", device)
     logger.info("The experiment is stored in %s", exp_dir)
 
-    train_loader = build_loader(cfg.train_loader, "train")
-    val_loader = build_loader(cfg.validation_loader, "validation")
+    curriculum_cfg = getattr(cfg, "curriculum", None)
+    curriculum_enabled = curriculum_cfg is not None and bool(getattr(curriculum_cfg, "enabled", False))
+
+    if curriculum_enabled:
+        logger.info("Curriculum learning enabled: flood→conflict")
+        curriculum_manager = CurriculumDataManager(
+            cfg,
+            flood_train_cfg    = cfg.flood_loader,
+            conflict_train_cfg = cfg.train_loader,
+            flood_val_cfg      = getattr(cfg, "flood_validation_loader", None),
+            conflict_val_cfg   = cfg.validation_loader,
+        )
+        train_loader = curriculum_manager.flood_loader
+        # Start with flood val loader; Trainer will swap at stage boundary
+        val_loader = curriculum_manager.flood_val_loader or build_loader(cfg.validation_loader, "validation")
+    else:
+        curriculum_manager = None
+        train_loader = build_loader(cfg.train_loader, "train")
+        val_loader   = build_loader(cfg.validation_loader, "validation")
     holdout_loader = build_holdout_loader(cfg)
     encoder, change_fusion, decoder, criterion, optimizer = build_model_components(cfg, device, train_loader)
 
@@ -191,6 +215,7 @@ def main(cfg: DictConfig):
         optimizer=optimizer,
         logger=logger,
         use_wandb=cfg.use_wandb,
+        curriculum_manager=curriculum_manager,
     )
     evaluator = Evaluator(
         cfg=cfg,

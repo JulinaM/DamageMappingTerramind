@@ -11,3 +11,4 @@
 ./flood_to_cropland_etl/Sen1Floods11_data/*
 ./examples/*.csv
 ./examples/*.png
+./data/claude-summary/*
